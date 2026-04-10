@@ -9,7 +9,7 @@ export async function runCli(argv = process.argv) {
   const program = new Command();
 
   program
-    .name("llm-proxy")
+    .name("llmog")
     .description("A lightweight proxy to route requests to local LLMs via an OpenAI-compatible API.")
     .version(process.env.npm_package_version ?? "0.0.0");
 

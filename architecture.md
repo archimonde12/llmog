@@ -1,6 +1,6 @@
-# Project Architecture: llm-proxy
+# Project Architecture: llmog
 
-`llm-proxy` is a lightweight gateway that routes OpenAI-compatible HTTP requests to local or remote LLM backends (Ollama, vLLM, OpenAI-compatible servers, etc.) through a single unified endpoint.
+`llmog` is a lightweight gateway that routes OpenAI-compatible HTTP requests to local or remote LLM backends (Ollama, vLLM, OpenAI-compatible servers, etc.) through a single unified endpoint.
 
 ## Overview
 
@@ -11,8 +11,8 @@ The proxy is a **standardization layer**: clients use one base URL and the usual
 1. **Program entry (`src/index.ts`)**  
    Reads `PORT`, `HOST`, and optional `MODELS_PATH`. Loads config via `loadModelsFile` from `src/config/load.ts` (same resolution order as the CLI), then calls `buildServer({ bindHost: host, initial: loaded })` and listens. Default bind is `0.0.0.0:8787` unless overridden.
 
-2. **CLI (`src/cli/`, binary `llm-proxy`)**
-   Commander-based commands (see `src/cli/`). `start` resolves `models.json` from `--models`, then `MODELS_PATH`, then project `./models.json`, then `~/.config/llm-proxy/models.json` (canonical), then `~/.config/llm-open-gateway/models.json` (legacy, backward compat) if the project file is missing. It passes the resolved load result into `buildServer({ bindHost, initial })` so metadata matches the running process. CLI `start` default bind is `127.0.0.1:8787` when unset.
+2. **CLI (`src/cli/`, binary `llmog`)**
+   Commander-based commands (see `src/cli/`). `start` resolves `models.json` from `--models`, then `MODELS_PATH`, then `~/.config/llmog/models.json` (canonical), then `~/.config/llm-proxy/models.json`, then `~/.config/llm-open-gateway/models.json` (legacy, backward compat). It passes the resolved load result into `buildServer({ bindHost, initial })` so metadata matches the running process. CLI `start` default bind is `127.0.0.1:8787` when unset.
 
 3. **Server (`src/server.ts`)**  
    Fastify application: OpenAI-style public routes, **Admin API** (`/admin/*`), optional **local Web UI** static assets under `/ui/` (when `ui/dist` exists), request/request+model history recording, error handling, and observability. Runtime config is held in a mutable **state** object (models file + active config path); `PUT /admin/config` and `POST /admin/reload` update that state without restarting the process.
@@ -34,7 +34,7 @@ The proxy is a **standardization layer**: clients use one base URL and the usual
    - **`src/config.ts`** — `resolveModelConfig` (shared lookup + 400 on unknown model); also includes a simple `loadModelsFile(modelsPath?)` helper that loads `cwd/models.json` by default.  
    - **`src/config/load.ts`** — Reads JSON, validates with Zod (`ModelsFileSchema`), resolves CLI/env/project/user paths, exposes `ConfigValidationError` / `formatConfigError`. Also supports `${ENV_VAR}` expansion for `apiKey` fields (missing env var removes the field so validation can still succeed).  
    - **`src/config/schema.ts`** — Zod schemas for `models.json` (duplicate `id` checks, URL validation).  
-   - **`src/config/paths.ts`** — Default paths and filesystem helpers. Exports `canonicalUserModelsPath` (`~/.config/llm-proxy/models.json`) and `legacyUserModelsPath` (`~/.config/llm-open-gateway/models.json`) for backward compatibility with older installs.
+   - **`src/config/paths.ts`** — Default paths and filesystem helpers. Exports `canonicalUserModelsPath` (`~/.config/llmog/models.json`) plus legacy fallbacks for `~/.config/llm-proxy/models.json` and `~/.config/llm-open-gateway/models.json`.
 
 8. **Observability (`src/observability/`)**  
    - **`metrics.ts`** — Prometheus (`prom-client`): HTTP counters/histograms, upstream error counter, token counters; scrape endpoint `GET /metrics`.  
@@ -47,7 +47,7 @@ The proxy is a **standardization layer**: clients use one base URL and the usual
 
 9. **Admin & UI (`src/admin/`, `ui/`)**  
    - **`admin/auth.ts`** — When the server is bound to a non-loopback address (e.g. `0.0.0.0`), requests to `/admin/*` are guarded to localhost (`127.0.0.1`, `::1`, or IPv4-mapped `::ffff:127.0.0.1`). UI routes (`/` and `/ui/*`) are also guarded. Loopback-only binds skip this check.  
-   - **`admin/configStore.ts`** — Validates JSON with the same Zod schema as disk load; resolves **write target** (writable loaded file vs fallback `~/.config/llm-proxy/models.json`); atomic file write for saves.  
+   - **`admin/configStore.ts`** — Validates JSON with the same Zod schema as disk load; resolves **write target** (writable loaded file vs fallback `~/.config/llmog/models.json`); atomic file write for saves.  
    - **`admin/routes.ts`** — Registers Admin API handlers.  
    - **`version.ts`** — Reads `version` from `package.json` for `GET /admin/health`.  
    - **`ui/`** — Vite + React app (build output `ui/dist/`). Production `pnpm build` runs `build:ui` then TypeScript. The server serves static files with `@fastify/static` and redirects `GET /` → `/ui/` when assets are present.

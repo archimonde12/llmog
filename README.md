@@ -1,6 +1,6 @@
-# llm-proxy
+# llmog
 
-**llm-proxy** is a lightweight, high-performance gateway designed to unify multiple LLM backends (Ollama, vLLM, OpenAI-compatible servers, etc.) into a single, standardized OpenAI-compatible API endpoint.
+**llmog** is a lightweight, high-performance gateway designed to unify multiple LLM backends (Ollama, vLLM, OpenAI-compatible servers, etc.) into a single, standardized OpenAI-compatible API endpoint.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
@@ -37,15 +37,15 @@
 **From npm (global CLI)** — no clone required; the published package includes `dist/` and `ui/dist` (dashboard at `/ui` when you run the server).
 
 ```bash
-npm install -g @archimonde12/llm-proxy
+npm install -g llmog
 ```
 
-Requires **Node.js 20+** (see `engines` in `package.json`). After installing, run `llm-proxy --help` or `llm-proxy start`.
+Requires **Node.js 20+** (see `engines` in `package.json`). After installing, run `llmog --help` or `llmog start`.
 
 **Without global install (npx):**
 
 ```bash
-npx @archimonde12/llm-proxy --help
+npx llmog --help
 ```
 
 Configuration file resolution is described under [Configuration](#configuration) (important when using a global install from arbitrary working directories).
@@ -53,9 +53,9 @@ Configuration file resolution is described under [Configuration](#configuration)
 **From source** (development):
 
 ```bash
-# Clone the repository (replace OWNER with your fork or upstream)
-git clone https://github.com/OWNER/llm-proxy.git
-cd llm-proxy
+# Clone the repository
+git clone https://github.com/archimonde12/llmog.git
+cd llmog
 
 # Install dependencies
 pnpm install
@@ -69,7 +69,7 @@ pnpm install
 pnpm dev
 ```
 
-In **development** (`pnpm dev`), the default bind is **0.0.0.0:8787** (override with `HOST` and `PORT`). In **`llm-proxy start`** / **`pnpm start`**, the default bind is **127.0.0.1:8787** unless you set `HOST`, `PORT`, or pass `--host` / `--port`.
+In **development** (`pnpm dev`), the default bind is **0.0.0.0:8787** (override with `HOST` and `PORT`). In **`llmog start`** / **`pnpm start`**, the default bind is **127.0.0.1:8787** unless you set `HOST`, `PORT`, or pass `--host` / `--port`.
 
 **Production** (compiled server and built web UI):
 
@@ -80,9 +80,9 @@ pnpm start      # or: npm start — runs node dist/index.js
 
 A full build always runs the UI step first, so `ui/dist` is present afterward. Maintainers can use **npm** or **pnpm** for `build` / `start`; the build script does not invoke `pnpm` internally.
 
-### CLI (`llm-proxy`)
+### CLI (`llmog`)
 
-With **`npm install -g @archimonde12/llm-proxy`**, use the `llm-proxy` command on your `PATH`.
+With **`npm install -g llmog`**, use the `llmog` command on your `PATH`.
 
 From a **source** tree after `npm run build` / `pnpm build`:
 
@@ -117,14 +117,14 @@ The proxy uses a `models.json` file to map your custom model IDs to specific bac
 
 **Resolution order** (see [`src/config/load.ts`](src/config/load.ts)):
 
-1. **`llm-proxy start --models <path>`** — explicit file path.
+1. **`llmog start --models <path>`** — explicit file path.
 2. **`MODELS_PATH`** — if set, that path is used (a starter file is created if missing).
-3. **Otherwise:** **`./models.json`** relative to the **current working directory** — if it exists, it is used.
-4. **Otherwise:** **`~/.config/llm-proxy/models.json`** — canonical user config; if it exists, it is used (good default for a **global** install when you are not in a project directory).
-5. **Otherwise:** **`~/.config/llm-open-gateway/models.json`** — legacy path for backward compatibility with older installs; used only if the canonical path above does not exist.
-6. **Otherwise:** a starter `models.json` is created at **`./models.json`** in the current working directory.
+3. **Otherwise:** **`~/.config/llmog/models.json`** — canonical user config; if it exists, it is used.
+4. **Otherwise:** **`~/.config/llm-proxy/models.json`** — legacy path for backward compatibility with previous package naming.
+5. **Otherwise:** **`~/.config/llm-open-gateway/models.json`** — legacy path for older installs.
+6. **Otherwise:** a starter `models.json` is created at **`~/.config/llmog/models.json`**.
 
-This means a global install does not require a checkout: use a file in the cwd, set `MODELS_PATH`, pass `--models`, or keep your config under `~/.config/llm-proxy/models.json`.
+This means a global install does not require a checkout: use `--models`, set `MODELS_PATH`, or keep your config under `~/.config/llmog/models.json`.
 
 ### Example `models.json`
 
@@ -204,7 +204,7 @@ The UI is a static SPA served from **`ui/dist`**. The server registers it **only
 
 | Method | Path | Description |
 | :--- | :--- | :--- |
-| `GET` | `/healthz` | Liveness: returns `{ ok: true }` while the process is running. Used by **`llm-proxy status`**. |
+| `GET` | `/healthz` | Liveness: returns `{ ok: true }` while the process is running. Used by **`llmog status`**. |
 | `GET` | `/readyz` | Readiness. With **`?deep=1`**, probes each model's upstream; may return **503** if any probe fails. |
 
 ### Admin API (localhost when exposed on a public bind)
@@ -247,7 +247,7 @@ The UI is a static SPA served from **`ui/dist`**. The server registers it **only
 
 ## Security and exposure
 
-If you intend to expose `llm-proxy` to the internet (e.g., via **ngrok** or a reverse proxy), please follow these best practices:
+If you intend to expose `llmog` to the internet (e.g., via **ngrok** or a reverse proxy), please follow these best practices:
 
 1.  **Use HTTPS**: Always use an SSL/TLS tunnel or terminating proxy.
 2.  **Admin and UI**: The server restricts `/admin/*` and `/ui/*` to localhost when it detects a non-loopback bind.
@@ -264,6 +264,15 @@ ngrok http 8787
 ## Contributing
 
 Pull requests are welcome; please keep changes focused and consistent with existing patterns.
+
+---
+
+## Migration notes
+
+- Command rename: `llm-proxy` -> `llmog`.
+- Package rename: `@archimonde12/llm-proxy` -> `llmog`.
+- Canonical config path: `~/.config/llmog/models.json`.
+- Backward compatibility remains: `~/.config/llm-proxy/models.json` and `~/.config/llm-open-gateway/models.json` are still checked as fallbacks.
 
 ---
 

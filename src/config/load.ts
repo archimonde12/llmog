@@ -3,9 +3,9 @@ import path from "node:path";
 import { createDefaultModelsFile } from "./defaultModelsFile";
 import {
   canonicalUserModelsPath,
-  defaultProjectModelsPath,
   ensureParentDir,
   fileExists,
+  legacyProxyUserModelsPath,
   legacyUserModelsPath,
 } from "./paths";
 import { ModelsFileSchema, type ModelsFile } from "./schema";
@@ -27,8 +27,8 @@ export function resolveModelsPath(input?: { cliFlagPath?: string; envPath?: stri
     return { kind: "env", path: path.resolve(envPath) } as const;
   }
 
-  const project = defaultProjectModelsPath(input?.cwd);
-  return { kind: "project_default", path: project } as const;
+  const canonical = canonicalUserModelsPath();
+  return { kind: "user_default", path: canonical } as const;
 }
 
 export async function resolveExistingModelsPath(input?: {
@@ -37,11 +37,11 @@ export async function resolveExistingModelsPath(input?: {
   cwd?: string;
 }): Promise<ResolvedModelsSource> {
   const resolved = resolveModelsPath(input);
-  if (resolved.kind === "project_default") {
-    if (await fileExists(resolved.path)) return resolved;
-    // Check canonical user path first, then legacy (backward compat)
+  if (resolved.kind === "user_default") {
     const canonical = canonicalUserModelsPath();
     if (await fileExists(canonical)) return { kind: "user_default", path: canonical };
+    const legacyProxy = legacyProxyUserModelsPath();
+    if (await fileExists(legacyProxy)) return { kind: "user_default", path: legacyProxy };
     const legacy = legacyUserModelsPath();
     if (await fileExists(legacy)) return { kind: "user_default", path: legacy };
     return { kind: "user_default", path: canonical };
@@ -193,7 +193,6 @@ export async function loadModelsFile(input?: {
   envPath?: string;
   cwd?: string;
 }): Promise<LoadedModelsFile> {
-  const cwd = input?.cwd ?? process.cwd();
   const cliFlagPath = input?.cliFlagPath?.trim();
   const envPath = input?.envPath?.trim();
 
@@ -209,21 +208,21 @@ export async function loadModelsFile(input?: {
     createdDefaultFile = await ensureMockModelsFileAtPath(p);
     source = { kind: "env", path: p };
   } else {
-    const project = defaultProjectModelsPath(cwd);
-    if (await fileExists(project)) {
-      source = { kind: "project_default", path: project };
+    // Resolve order: canonical user path -> legacy llm-proxy path -> legacy llm-open-gateway path.
+    const canonical = canonicalUserModelsPath();
+    if (await fileExists(canonical)) {
+      source = { kind: "user_default", path: canonical };
     } else {
-      // Resolve order: canonical user path → legacy user path → create at project path
-      const canonical = canonicalUserModelsPath();
-      if (await fileExists(canonical)) {
-        source = { kind: "user_default", path: canonical };
+      const legacyProxy = legacyProxyUserModelsPath();
+      if (await fileExists(legacyProxy)) {
+        source = { kind: "user_default", path: legacyProxy };
       } else {
         const legacy = legacyUserModelsPath();
         if (await fileExists(legacy)) {
           source = { kind: "user_default", path: legacy };
         } else {
-          createdDefaultFile = await ensureMockModelsFileAtPath(project);
-          source = { kind: "project_default", path: project };
+          createdDefaultFile = await ensureMockModelsFileAtPath(canonical);
+          source = { kind: "user_default", path: canonical };
         }
       }
     }

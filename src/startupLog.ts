@@ -39,7 +39,7 @@ export function logStartupPreamble(opts: StartupPreambleOpts): void {
   const top = border(`╔${"═".repeat(w - 2)}╗`);
   const mid = border(`║${" ".repeat(w - 2)}║`);
   const bot = border(`╚${"═".repeat(w - 2)}╝`);
-  const name = "llm-proxy";
+  const name = "llmog";
   const titleLine =
     border("║") +
     "  " +

@@ -1,6 +1,6 @@
 import type { ModelsFile } from "./schema";
 
-/** Minimal valid config used by `llm-proxy init -y` and auto-create on first start. */
+/** Minimal valid config used by `llmog init -y` and auto-create on first start. */
 export function createDefaultModelsFile(): ModelsFile {
   return {
     models: [

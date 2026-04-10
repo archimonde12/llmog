@@ -1,5 +1,5 @@
 {
-  "name": "@archimonde12/llm-proxy",
+  "name": "llmog",
   "version": "1.0.0",
   "description": "A lightweight gateway that routes OpenAI-compatible requests to local and remote LLM backends.",
   "main": "dist/index.js",
@@ -9,7 +9,7 @@
     "./cli": "./dist/cli/bin.js"
   },
   "bin": {
-    "llm-proxy": "dist/cli/bin.js"
+    "llmog": "dist/cli/bin.js"
   },
   "files": [
     "dist",
@@ -41,12 +41,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/llmog/llm-proxy.git"
+    "url": "git+https://github.com/archimonde12/llmog.git"
   },
   "bugs": {
-    "url": "https://github.com/llmog/llm-proxy/issues"
+    "url": "https://github.com/archimonde12/llmog/issues"
   },
-  "homepage": "https://github.com/llmog/llm-proxy#readme",
+  "homepage": "https://github.com/archimonde12/llmog#readme",
   "dependencies": {
     "@fastify/static": "^9.1.0",
     "commander": "^14.0.1",

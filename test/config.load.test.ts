@@ -5,7 +5,11 @@ import {
   loadModelsFileFromPathAsStored,
   resolveExistingModelsPath,
 } from "../src/config/load";
-import { canonicalUserModelsPath, legacyUserModelsPath } from "../src/config/paths";
+import {
+  canonicalUserModelsPath,
+  legacyProxyUserModelsPath,
+  legacyUserModelsPath,
+} from "../src/config/paths";
 
 describe("config loader", () => {
   afterEach(() => {
@@ -39,17 +43,10 @@ describe("config loader", () => {
     }
   });
 
-  test("resolveExistingModelsPath prefers project models.json when present", async () => {
-    const fs = await import("node:fs/promises");
-    const os = await import("node:os");
-    const path = await import("node:path");
-
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "llm-proxy-cwd-"));
-    await fs.writeFile(path.join(tmp, "models.json"), JSON.stringify({ models: [] }), "utf8");
-
-    const resolved = await resolveExistingModelsPath({ cwd: tmp });
-    expect(resolved.kind).toBe("project_default");
-    expect(resolved.path).toContain(tmp);
+  test("resolveExistingModelsPath prefers canonical user models path", async () => {
+    const resolved = await resolveExistingModelsPath();
+    expect(resolved.kind).toBe("user_default");
+    expect(resolved.path).toBe(canonicalUserModelsPath());
   });
 
   test("rejects apiKeyHeader without apiKey", async () => {
@@ -119,20 +116,7 @@ describe("config loader", () => {
     }
   });
 
-  test("resolveExistingModelsPath falls back to ~/.config when project missing", async () => {
-    const fs = await import("node:fs/promises");
-    const os = await import("node:os");
-    const path = await import("node:path");
-
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "llm-proxy-cwd-missing-"));
-    const resolved = await resolveExistingModelsPath({ cwd: tmp });
-    expect(["user_default", "project_default"]).toContain(resolved.kind);
-    if (resolved.kind === "user_default") {
-      expect(resolved.path).toContain(path.join(os.homedir(), ".config", "llm-proxy"));
-    }
-  });
-
-  test("loadModelsFile creates starter project models.json when no config exists", async () => {
+  test("loadModelsFile creates starter user models.json when no config exists", async () => {
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
     const path = await import("node:path");
@@ -144,16 +128,16 @@ describe("config loader", () => {
 
     const cwd = path.join(tmp, "project");
     await fs.mkdir(cwd, { recursive: true });
-    const projectPath = path.join(cwd, "models.json");
+    const canonicalPath = path.join(fakeHome, ".config", "llmog", "models.json");
 
     const loaded = await loadModelsFile({ cwd });
     expect(loaded.createdDefaultFile).toBe(true);
-    expect(loaded.source.kind).toBe("project_default");
-    expect(loaded.source.path).toBe(projectPath);
+    expect(loaded.source.kind).toBe("user_default");
+    expect(loaded.source.path).toBe(canonicalPath);
     expect(loaded.modelsFile.models).toHaveLength(1);
     expect(loaded.modelsFile.models[0]!.id).toBe("ollama-llama3");
 
-    const raw = await fs.readFile(projectPath, "utf8");
+    const raw = await fs.readFile(canonicalPath, "utf8");
     expect(raw).toContain("ollama-llama3");
   });
 
@@ -172,11 +156,18 @@ describe("config loader", () => {
     await fs.access(target);
   });
 
-  test("canonicalUserModelsPath returns path under ~/.config/llm-proxy", async () => {
+  test("canonicalUserModelsPath returns path under ~/.config/llmog", async () => {
     const os = await import("node:os");
     const path = await import("node:path");
     const canonical = canonicalUserModelsPath();
-    expect(canonical).toBe(path.join(os.homedir(), ".config", "llm-proxy", "models.json"));
+    expect(canonical).toBe(path.join(os.homedir(), ".config", "llmog", "models.json"));
+  });
+
+  test("legacyProxyUserModelsPath returns path under ~/.config/llm-proxy", async () => {
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const legacyProxy = legacyProxyUserModelsPath();
+    expect(legacyProxy).toBe(path.join(os.homedir(), ".config", "llm-proxy", "models.json"));
   });
 
   test("legacyUserModelsPath returns path under ~/.config/llm-open-gateway", async () => {
@@ -195,7 +186,7 @@ describe("config loader", () => {
     const fakeHome = path.join(tmp, "home");
 
     // Create both canonical and legacy config files
-    const canonicalDir = path.join(fakeHome, ".config", "llm-proxy");
+    const canonicalDir = path.join(fakeHome, ".config", "llmog");
     const legacyDir = path.join(fakeHome, ".config", "llm-open-gateway");
     await fs.mkdir(canonicalDir, { recursive: true });
     await fs.mkdir(legacyDir, { recursive: true });
@@ -208,10 +199,10 @@ describe("config loader", () => {
 
     const resolved = await resolveExistingModelsPath({ cwd });
     expect(resolved.kind).toBe("user_default");
-    expect(resolved.path).toContain(path.join(".config", "llm-proxy", "models.json"));
+    expect(resolved.path).toContain(path.join(".config", "llmog", "models.json"));
   });
 
-  test("resolveExistingModelsPath falls back to legacy user path when canonical missing", async () => {
+  test("resolveExistingModelsPath falls back to legacy llm-proxy path when canonical missing", async () => {
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
     const path = await import("node:path");
@@ -219,7 +210,29 @@ describe("config loader", () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "llm-proxy-legacy-"));
     const fakeHome = path.join(tmp, "home");
 
-    // Create only legacy config file
+    // Create only legacy llm-proxy config file
+    const legacyProxyDir = path.join(fakeHome, ".config", "llm-proxy");
+    await fs.mkdir(legacyProxyDir, { recursive: true });
+    await fs.writeFile(path.join(legacyProxyDir, "models.json"), JSON.stringify({ models: [] }), "utf8");
+
+    vi.stubEnv("HOME", fakeHome);
+    const cwd = path.join(tmp, "project");
+    await fs.mkdir(cwd, { recursive: true });
+
+    const resolved = await resolveExistingModelsPath({ cwd });
+    expect(resolved.kind).toBe("user_default");
+    expect(resolved.path).toContain(path.join(".config", "llm-proxy", "models.json"));
+  });
+
+  test("resolveExistingModelsPath falls back to legacy llm-open-gateway path when canonical and llm-proxy are missing", async () => {
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "llm-proxy-legacy-open-gateway-"));
+    const fakeHome = path.join(tmp, "home");
+
+    // Create only legacy llm-open-gateway config file
     const legacyDir = path.join(fakeHome, ".config", "llm-open-gateway");
     await fs.mkdir(legacyDir, { recursive: true });
     await fs.writeFile(path.join(legacyDir, "models.json"), JSON.stringify({ models: [] }), "utf8");

@@ -3,9 +3,21 @@ import path from "node:path";
 
 const ENV_KEY_RE = /^[A-Z0-9_]+$/;
 
-export function resolveDotenvPath(): { path: string; source: "DOTENV_CONFIG_PATH" | "cwd" } {
+export function resolveDotenvPath(activeModelsPath?: string): {
+  path: string;
+  source: "DOTENV_CONFIG_PATH" | "beside_models" | "cwd";
+} {
   const configured = (process.env.DOTENV_CONFIG_PATH ?? "").trim();
   if (configured) return { path: path.resolve(configured), source: "DOTENV_CONFIG_PATH" };
+
+  const trimmed = (activeModelsPath ?? "").trim();
+  if (trimmed) {
+    return {
+      path: path.join(path.dirname(path.resolve(trimmed)), ".env"),
+      source: "beside_models",
+    };
+  }
+
   return { path: path.resolve(process.cwd(), ".env"), source: "cwd" };
 }
 

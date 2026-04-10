@@ -3,7 +3,7 @@ import prompts from "prompts";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createDefaultModelsFile } from "../../config/defaultModelsFile";
-import { defaultProjectModelsPath, defaultUserModelsPath, ensureParentDir, fileExists } from "../../config/paths";
+import { defaultUserModelsPath, ensureParentDir } from "../../config/paths";
 
 type InitOptions = {
   file?: string;
@@ -32,11 +32,7 @@ export function initCommand() {
     .action(async (opts: InitOptions) => {
       const isInteractive = Boolean(process.stdin.isTTY && !opts.yes);
 
-      const defaultPath = (await fileExists(defaultProjectModelsPath()))
-        ? defaultUserModelsPath()
-        : defaultProjectModelsPath();
-
-      const targetPath = path.resolve(opts.file ?? defaultPath);
+      const targetPath = path.resolve(opts.file ?? defaultUserModelsPath());
 
       let includeOpenAICompatible = true;
       if (isInteractive) {
@@ -78,7 +74,7 @@ export function initCommand() {
       // eslint-disable-next-line no-console
       console.log(`Wrote config to ${targetPath}`);
       // eslint-disable-next-line no-console
-      console.log(`Next: llm-proxy start --models "${targetPath}"`);
+      console.log(`Next: llmog start --models "${targetPath}"`);
     });
 
   return cmd;

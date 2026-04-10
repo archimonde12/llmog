@@ -71,7 +71,7 @@ export async function registerAdminRoutes(
   };
 
   app.get("/admin/env", { preHandler: guard }, async () => {
-    const r = resolveDotenvPath();
+    const r = resolveDotenvPath(ctx.state.activeConfigPath);
     const [keysInDotenvFile, dotenvEntries] = await Promise.all([
       listKeysInDotenvFile(r.path),
       listEntriesInDotenvFile(r.path),
@@ -108,7 +108,7 @@ export async function registerAdminRoutes(
       };
     }
 
-    const r = resolveDotenvPath();
+    const r = resolveDotenvPath(ctx.state.activeConfigPath);
     try {
       const result = await applyEnvUpdates({
         dotenvPath: r.path,

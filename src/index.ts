@@ -1,9 +1,11 @@
-import "dotenv/config";
 import { buildServer } from "./server";
 import { loadModelsFile } from "./config/load";
+import { loadDotenvForBootstrap } from "./config/dotenvBootstrap";
 import { logListenBanner, logStartupPreamble } from "./startupLog";
 
 async function main() {
+  await loadDotenvForBootstrap();
+
   const port = Number(process.env.PORT ?? 8787);
   const host = process.env.HOST ?? "0.0.0.0";
 

@@ -41,7 +41,7 @@ export function App() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand">llm-proxy</div>
+        <div className="brand">llmog</div>
         <nav className="nav">
           <button
             type="button"

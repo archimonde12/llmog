@@ -12,7 +12,7 @@ type StartOptions = {
 export function startCommand() {
   const cmd = new Command("start");
   cmd
-    .description("Start the llm-proxy server.")
+    .description("Start the llmog server.")
     .option("--models <path>", "Path to models.json")
     .option("--port <port>", "Port to listen on (default: 8787)")
     .option("--host <host>", "Host to bind (default: 127.0.0.1)")

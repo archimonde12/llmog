@@ -8,7 +8,7 @@ export function statusCommand() {
   const cmd = new Command("status");
   cmd
     .description("Check server health (GET /healthz).")
-    .option("--url <baseUrl>", "Base URL of llm-proxy (default: http://127.0.0.1:8787)")
+    .option("--url <baseUrl>", "Base URL of llmog (default: http://127.0.0.1:8787)")
     .action(async (opts: StatusOptions) => {
       const baseUrl = (opts.url ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
       const res = await fetch(`${baseUrl}/healthz`, {

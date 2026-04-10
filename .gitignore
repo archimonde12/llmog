@@ -36,3 +36,6 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 models.json
+
+# Package
+*.tgz       # tarball of the package

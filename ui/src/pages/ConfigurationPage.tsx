@@ -53,7 +53,7 @@ type PutConfigResponse = {
 
 type TestResp = { ok: boolean; status: number; message: string; baseUrl: string };
 
-const LS_TEST_STATUS = "llm-proxy:config:testStatus:v1";
+const LS_TEST_STATUS = "llmog:config:testStatus:v1";
 const RELOAD_COOLDOWN_MS = 2000;
 const TEST_ALL_COOLDOWN_MS = 2000;
 const AUTO_TEST_INTERVAL_MS = 5 * 60_000;

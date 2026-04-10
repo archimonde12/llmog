@@ -27,7 +27,7 @@ export async function isPathWritableAsFile(filePath: string): Promise<boolean> {
 
 /**
  * If the loaded config file path is writable (or can be created), use it.
- * Otherwise fall back to ~/.config/llm-proxy/models.json.
+ * Otherwise fall back to ~/.config/llmog/models.json.
  */
 export async function resolveWriteTarget(loadedFrom: string): Promise<{
   writeTarget: string;

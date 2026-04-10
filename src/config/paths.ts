@@ -6,8 +6,17 @@ export function defaultProjectModelsPath(cwd: string = process.cwd()) {
   return path.resolve(cwd, "models.json");
 }
 
-/** Canonical user-level config path: ~/.config/llm-proxy/models.json */
+/** Canonical user-level config path: ~/.config/llmog/models.json */
 export function canonicalUserModelsPath() {
+  return path.resolve(os.homedir(), ".config", "llmog", "models.json");
+}
+
+/**
+ * Legacy user-level config path kept for backward compatibility with
+ * older llm-proxy package naming.
+ * ~/.config/llm-proxy/models.json
+ */
+export function legacyProxyUserModelsPath() {
   return path.resolve(os.homedir(), ".config", "llm-proxy", "models.json");
 }
 
