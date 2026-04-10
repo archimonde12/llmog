@@ -1,6 +1,6 @@
 {
   "name": "llmog",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A lightweight gateway that routes OpenAI-compatible requests to local and remote LLM backends.",
   "main": "dist/index.js",
   "exports": {
