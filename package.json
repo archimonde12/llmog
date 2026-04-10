@@ -1,0 +1,73 @@
+{
+  "name": "@archimonde12/llm-proxy",
+  "version": "1.0.0",
+  "description": "A lightweight gateway that routes OpenAI-compatible requests to local and remote LLM backends.",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json",
+    "./cli": "./dist/cli/bin.js"
+  },
+  "bin": {
+    "llm-proxy": "dist/cli/bin.js"
+  },
+  "files": [
+    "dist",
+    "ui/dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "vite build --config ui/vite.config.ts && tsc -p tsconfig.build.json",
+    "build:ui": "vite build --config ui/vite.config.ts",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js",
+    "cli": "node dist/cli/bin.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "llm",
+    "proxy",
+    "gateway",
+    "openai",
+    "ollama",
+    "cli",
+    "ai"
+  ],
+  "author": "llmog",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/llmog/llm-proxy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/llmog/llm-proxy/issues"
+  },
+  "homepage": "https://github.com/llmog/llm-proxy#readme",
+  "dependencies": {
+    "@fastify/static": "^9.1.0",
+    "commander": "^14.0.1",
+    "dotenv": "^17.2.2",
+    "fastify": "^5.8.4",
+    "prom-client": "^15.1.3",
+    "prompts": "^2.4.2",
+    "zod": "^4.1.5"
+  },
+  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "@types/prompts": "^2.4.9",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.7",
+    "vitest": "^3.2.4"
+  }
+}

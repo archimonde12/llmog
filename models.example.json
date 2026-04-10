@@ -1,0 +1,24 @@
+{
+  "models": [
+    {
+      "id": "local-llm-ollama",
+      "adapter": "ollama",
+      "baseUrl": "http://localhost:11434",
+      "model": "llama3"
+    },
+    {
+      "id": "openrouter",
+      "adapter": "openai_compatible",
+      "baseUrl": "https://openrouter.ai/api",
+      "model": "openrouter/free",
+      "apiKey": "${OPENROUTER_API_KEY}"
+    },
+    {
+      "id": "deepseek",
+      "adapter": "deepseek",
+      "baseUrl": "https://api.deepseek.com",
+      "model": "deepseek-chat",
+      "apiKey": "${DEEPSEEK_API_KEY}"
+    }
+  ]
+}
