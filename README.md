@@ -11,6 +11,20 @@
 
 ---
 
+## Web UI preview
+
+Built-in dashboard (served at **`/ui/`** when `ui/dist` is present). These screenshots come from Playwright visual baselines in [`tests/e2e/visual.spec.ts-snapshots`](tests/e2e/visual.spec.ts-snapshots). Details: [Web UI (dashboard)](#web-ui-dashboard).
+
+| Configuration | Monitoring |
+| :---: | :---: |
+| ![Configuration screen](tests/e2e/visual.spec.ts-snapshots/configuration.png) | ![Monitoring screen](tests/e2e/visual.spec.ts-snapshots/monitoring.png) |
+
+| Models | Playground | Probe |
+| :---: | :---: | :---: |
+| ![Models screen](tests/e2e/visual.spec.ts-snapshots/models.png) | ![Playground screen](tests/e2e/visual.spec.ts-snapshots/playground.png) | ![Probe screen](tests/e2e/visual.spec.ts-snapshots/probe.png) |
+
+---
+
 ## Key features
 
 *   **Unified interface**: Access different backends (Ollama, vLLM, etc.) using the standard OpenAI SDK and payload format.
@@ -201,17 +215,7 @@ The UI is a static SPA served from **`ui/dist`**. The server registers it **only
 
 **Visual regression:** Playwright screenshot tests, baselines, and CI are described in [`ui/README.md`](ui/README.md). From the repo root: **`pnpm test:visual`** (build UI then Playwright), **`pnpm test:visual:update`** to refresh baselines; CI runs the same spec on Ubuntu. Unit tests remain **`pnpm test`** (Vitest).
 
-### UI screenshots
-
-The images below are generated from Playwright visual baselines in [`tests/e2e/visual.spec.ts-snapshots`](tests/e2e/visual.spec.ts-snapshots):
-
-| Configuration | Monitoring |
-| :---: | :---: |
-| ![Configuration screen](tests/e2e/visual.spec.ts-snapshots/configuration.png) | ![Monitoring screen](tests/e2e/visual.spec.ts-snapshots/monitoring.png) |
-
-| Models | Playground | Probe |
-| :---: | :---: | :---: |
-| ![Models screen](tests/e2e/visual.spec.ts-snapshots/models.png) | ![Playground screen](tests/e2e/visual.spec.ts-snapshots/playground.png) | ![Probe screen](tests/e2e/visual.spec.ts-snapshots/probe.png) |
+**Screenshots:** see [Web UI preview](#web-ui-preview) at the top of this README.
 
 ---
 
