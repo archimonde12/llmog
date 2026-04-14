@@ -22,7 +22,7 @@ The proxy is a **standardization layer**: clients use one base URL and the usual
 
 5. **Adapters (`src/adapters/`)**  
    Shared contract `LlmAdapter` in `base.ts`: `chatCompletions` and optional `chatCompletionsStream`. Implementations:
-   - `ollama.ts` — Ollama HTTP API
+   - `ollama.ts` — Ollama HTTP API; non-stream and stream responses attach synthesized **`usage`** for clients and metrics.
    - `openaiCompatible.ts` — any OpenAI-compatible `/v1/chat/completions` backend
    - `deepseek.ts` — DeepSeek API mapping (adapter id `deepseek`)
    Factory: `adapters/index.ts` (`createAdapter`).
@@ -39,7 +39,7 @@ The proxy is a **standardization layer**: clients use one base URL and the usual
 8. **Observability (`src/observability/`)**  
    - **`metrics.ts`** — Prometheus (`prom-client`): HTTP counters/histograms, upstream error counter, token counters; scrape endpoint `GET /metrics`.  
    - **`requestId.ts`** — Request id from `x-request-id` or a new UUID; echoed on responses.  
-   - **`tokenUsage.ts`** — Best-effort extraction of usage from JSON and SSE chunks for logging and metrics.  
+   - **`tokenUsage.ts`** — Best-effort extraction of usage from JSON and SSE chunks for logging and metrics; **`usageFromOllamaGenerateWithRawFallback`** builds OpenAI-shaped counts from Ollama `prompt_eval_count` / `eval_count` or a rough text-length heuristic.  
    - **`requestRecorder.ts`** — In-memory bounded ring buffer of recent requests (for `GET /admin/requests`).  
    - **`modelRequestStore.ts`** — In-memory per-request log for model calls (for `/admin/metrics/*`, `/admin/logs/models`, `/admin/requests/:requestId`).  
    - **`modelMessageDebugStore.ts`** — In-memory per-model ring buffer of selected input messages (roles `system`/`user`) for deep-debug (for `GET /admin/models/:modelId/debug/messages`).  
@@ -48,9 +48,11 @@ The proxy is a **standardization layer**: clients use one base URL and the usual
 9. **Admin & UI (`src/admin/`, `ui/`)**  
    - **`admin/auth.ts`** — When the server is bound to a non-loopback address (e.g. `0.0.0.0`), requests to `/admin/*` are guarded to localhost (`127.0.0.1`, `::1`, or IPv4-mapped `::ffff:127.0.0.1`). UI routes (`/` and `/ui/*`) are also guarded. Loopback-only binds skip this check.  
    - **`admin/configStore.ts`** — Validates JSON with the same Zod schema as disk load; resolves **write target** (writable loaded file vs fallback `~/.config/llmog/models.json`); atomic file write for saves.  
+   - **`admin/playgroundTemplatesStore.ts`** — Reads/writes **`playground-templates.json`** beside the active config write target (or under `~/.config/llmog/` when no directory can be inferred), validated with Zod; serves `GET/PUT /admin/playground/templates`.  
+   - **`admin/upstreamDiscover.ts`** — `discoverUpstreamModels`: `GET` Ollama **`/api/tags`**, OpenAI-compatible **`/v1/models`**, or DeepSeek’s models listing; used by `POST /admin/discover-upstream-models`.  
    - **`admin/routes.ts`** — Registers Admin API handlers.  
    - **`version.ts`** — Reads `version` from `package.json` for `GET /admin/health`.  
-   - **`ui/`** — Vite + React app (build output `ui/dist/`). Production `pnpm build` runs `build:ui` then TypeScript. The server serves static files with `@fastify/static` and redirects `GET /` → `/ui/` when assets are present.
+   - **`ui/`** — Vite + React app (build output `ui/dist/`). Production `pnpm build` runs `build:ui` then TypeScript. The server serves static files with `@fastify/static` and redirects `GET /` → `/ui/` when assets are present. A maintained map of the **`ui/`** tree, hash routes, and which **Admin API** each screen calls lives in **[`ui/README.md`](ui/README.md)**—read it when modifying the dashboard. **Visual regression** uses Playwright `toHaveScreenshot` against `vite preview` with `page.route` mocks (`tests/e2e/visual.spec.ts`, fixtures under `tests/e2e/fixtures/`); hash routes **configuration**, **monitoring**, **models**, **playground**, and **probe** have baselines. Root scripts `test:visual` / `test:visual:update` are in **`package.json`**; CI runs the same spec on Linux. Vitest covers unit tests (including playground templates and discovery helpers) separately.
 
 ## HTTP Surface
 
@@ -73,10 +75,13 @@ The proxy is a **standardization layer**: clients use one base URL and the usual
 | `PUT /admin/config` | Replace config (validated); writes to the resolved write target and updates in-memory state. |
 | `POST /admin/reload` | Reload config from `activeConfigPath` on disk into memory. |
 | `POST /admin/test-connection` | Probe upstream `GET` for a `modelId` or a draft `{ adapter, baseUrl, model }` (draft adapter supports `ollama` and `openai_compatible`). |
+| `POST /admin/discover-upstream-models` | List upstream model ids for `{ adapter, baseUrl }` (optional `apiKey`, `timeoutMs`): Ollama tags, OpenAI `/v1/models`, or DeepSeek-compatible discovery. |
 | `GET /admin/metrics/summary` | JSON snapshot derived from prom-client metrics (uptime, counts, mean latency). |
 | `GET /admin/metrics/overview?range=15m\|1h\|24h` | Token + request overview from in-memory model logs (p50/p95 latency, error rate, timeseries). |
 | `GET /admin/logs/models?range=&modelId=&status=&limit=` | Recent per-model request logs (from the in-memory store). |
 | `GET /admin/models/:modelId/debug/messages?limit=&roles=system,user` | Recent captured `system`/`user` input messages for that model (deep-debug). |
+| `GET /admin/playground/templates` | Saved Playground templates (JSON file on disk; default empty list if missing). |
+| `PUT /admin/playground/templates` | Replace the full templates list (validated); atomic write to `playground-templates.json` next to the config write target or under `~/.config/llmog/`. |
 | `GET /admin/requests/:requestId` | Request detail by id (from the in-memory model store). |
 | `GET /admin/requests?limit=` | Recent requests from the in-memory recorder (no bodies or sensitive headers). |
 
@@ -85,7 +90,9 @@ The proxy is a **standardization layer**: clients use one base URL and the usual
 | Route | Role |
 | :--- | :--- |
 | `GET /` | Redirects to `/ui/` when `ui/dist` exists. |
-| `GET /ui/*` | Static assets for the configuration + monitoring UI (same-origin calls to `/admin/*`). |
+| `GET /ui/*` | Static assets for the dashboard (Configuration, Monitoring, Models, Playground, Endpoint probe); same-origin `/admin/*` and `/v1/*` from the browser. |
+
+In-app navigation uses **hash routes** (for example `#/configuration`); see [`ui/README.md`](ui/README.md) for the canonical list and how they map to Admin handlers.
 
 **Note:** `HOST` defaults differ: `src/index.ts` defaults to `0.0.0.0`; CLI `start` defaults to `127.0.0.1` when unset. When listening on all interfaces, Admin and UI routes enforce localhost as described above.
 
@@ -159,6 +166,6 @@ Adapter values are **`ollama`**, **`openai_compatible`** (underscore), and **`de
 - **Validation**: Zod  
 - **CLI**: Commander  
 - **Metrics**: prom-client (Prometheus)  
-- **Tests**: Vitest  
+- **Tests**: Vitest; Playwright (visual regression in `tests/e2e/`)  
 - **Package manager**: pnpm  
 - **Web UI (dev/build)**: Vite, React (output under `ui/dist/`, served in production by Fastify)  

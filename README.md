@@ -19,6 +19,7 @@
 *   **Built-in observability**:
     *   **Prometheus metrics**: Monitor request counts, latency, and token usage.
     *   **Request history**: Track recent requests via an in-memory buffer.
+    *   **Ollama usage hints**: Chat completions from the Ollama adapter include OpenAI-style `usage` when the upstream reports eval counts (with a best-effort fallback estimate otherwise).
 *   **Web UI**: A built-in dashboard to manage configuration, environment variables, and monitoring (when `ui/dist` is present).
 *   **Streaming**: Full support for Server-Sent Events (SSE) for real-time chat completions.
 *   **Lightweight and fast**: Built with **Fastify** and **TypeScript** for minimal overhead and maximum throughput.
@@ -175,6 +176,8 @@ After changing environment variables (for example via **`PUT /admin/env`**), cal
 
 ## Web UI (dashboard)
 
+**Contributor map:** Directory layout, hash routes, screen-to-Admin-API mapping, UX notes, and visual regression plans are maintained in **[`ui/README.md`](ui/README.md)**. Use it when changing the dashboard; it complements [`architecture.md`](architecture.md) for overall system design.
+
 The UI is a static SPA served from **`ui/dist`**. The server registers it **only if that directory exists**; otherwise there is no **`GET /`** redirect to the app (see [`src/server.ts`](src/server.ts)).
 
 **Prerequisite:** run **`pnpm build:ui`** or a full **`pnpm build`** before starting the server if you want the dashboard.
@@ -184,15 +187,19 @@ The UI is a static SPA served from **`ui/dist`**. The server registers it **only
 * **`GET /`** → **302** to **`/ui/`** when the UI bundle is present.
 * Static assets are served under **`/ui/`**.
 
-**In-app routes** (hash-based):
+**In-app routes** (hash-based; file-level details in [`ui/README.md`](ui/README.md)):
 
-* **`#/configuration`** — Edit `models.json` and environment variables through the Admin API.
+* **`#/configuration`** — Edit `models.json` and environment variables through the Admin API; **fetch upstream model ids** via `POST /admin/discover-upstream-models`.
 * **`#/monitoring`** — Metrics overview with time ranges **15m**, **1h**, and **24h** (aligned with `/admin/metrics/overview`).
 * **`#/models`** — Model list, request logs, and debug message capture.
+* **`#/playground`** — Try chat completions (SSE) and saved **templates** (`GET`/`PUT` `/admin/playground/templates`).
+* **`#/probe`** — **Endpoint probe**: list models from an OpenAI-compatible base URL through the server (avoids browser CORS).
 
 **Security:** When the process binds to a non-loopback address, **`/admin/*`** and **`/ui/*`** are restricted to localhost clients. To use the dashboard remotely, use local access, SSH port forwarding, or a tunnel you trust.
 
 **UI development:** There is no separate `package.json` under `ui/`; for a local Vite dev server you can run e.g. `pnpm exec vite --config ui/vite.config.ts` from the repo root. Production assets are built with **`pnpm build:ui`**.
+
+**Visual regression:** Playwright screenshot tests, baselines, and CI are described in [`ui/README.md`](ui/README.md). From the repo root: **`pnpm test:visual`** (build UI then Playwright), **`pnpm test:visual:update`** to refresh baselines; CI runs the same spec on Ubuntu. Unit tests remain **`pnpm test`** (Vitest).
 
 ---
 
@@ -225,6 +232,7 @@ The UI is a static SPA served from **`ui/dist`**. The server registers it **only
 | Method | Path | Description |
 | :--- | :--- | :--- |
 | `POST` | `/admin/test-connection` | Probe a configured **`modelId`** or an inline adapter/baseUrl/model payload. |
+| `POST` | `/admin/discover-upstream-models` | List model names from an upstream (`adapter`, `baseUrl`, optional `apiKey`, `timeoutMs`). |
 | `GET` | `/admin/metrics/summary` | JSON snapshot from in-process metrics. |
 | `GET` | `/admin/metrics/overview` | Overview for **`range=15m`**, **`1h`**, or **`24h`** (query param). |
 
@@ -236,6 +244,13 @@ The UI is a static SPA served from **`ui/dist`**. The server registers it **only
 | `GET` | `/admin/requests/:requestId` | Single request record by id. |
 | `GET` | `/admin/logs/models` | Model-scoped logs with **`range`**, optional **`modelId`**, **`status`**, **`limit`**. |
 | `GET` | `/admin/models/:modelId/debug/messages` | Recent captured **system** / **user** messages for debugging (`limit`, **`roles`**). |
+
+**Playground templates**
+
+| Method | Path | Description |
+| :--- | :--- | :--- |
+| `GET` | `/admin/playground/templates` | Saved Playground templates (JSON on disk; empty list if missing). |
+| `PUT` | `/admin/playground/templates` | Replace templates (validated); atomic write beside the config write target or under `~/.config/llmog/`. |
 
 ### Prometheus
 

@@ -1,0 +1,30 @@
+---
+description: >-
+  When changing UI, keep ui/README.md in sync; for intentional visual changes,
+  update Playwright screenshot baselines (never ad-hoc manual screenshots).
+globs: "{ui,tests/e2e}/**/*"
+alwaysApply: false
+---
+
+# UI dashboard: README sync and visual regression
+
+## Keep `ui/README.md` accurate
+
+When you change anything that affects how contributors or agents understand the dashboard, update [`ui/README.md`](../../ui/README.md):
+
+- Hash routes (`#/configuration`, `#/monitoring`, `#/models`, or new routes)
+- Pages, shell layout, or primary user flows
+- Mapping from screens to admin API endpoints or server handlers
+- Designer/UX notes (app shell, sidebar, main content, patterns like tables/forms/charts/drawers)
+
+Do not leave the README contradicting the code. For system-wide architecture, point readers to [`architecture.md`](../../architecture.md) instead of duplicating it.
+
+## Playwright visual regression (VRT)
+
+If the repo has Playwright screenshot tests (`test:visual` / `test:visual:update` or equivalent):
+
+- **Intentional design or layout change:** run the documented command to update baselines (e.g. `playwright test --update-snapshots`), then commit the new baseline images in a PR that is reviewed for the visual change. Do not replace baselines by hand with arbitrary image files.
+- **Accidental regression:** fix the UI or the test; do **not** update baselines to hide a real breakage.
+- **Human review:** snapshot review and CI remain the source of truth; the agent does not replace that process.
+
+If VRT is not set up yet, still avoid embedding one-off “manual” screenshots in docs as a substitute for automated baselines.

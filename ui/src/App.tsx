@@ -2,29 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { MonitoringPage } from "./pages/MonitoringPage";
 import { ModelsPage } from "./pages/ModelsPage";
 import { ConfigurationPage } from "./pages/ConfigurationPage";
+import { PlaygroundPage } from "./pages/PlaygroundPage";
+import { ProbePage } from "./pages/ProbePage";
 import type { RangeKey } from "./lib/time";
-
-type Route =
-  | { name: "configuration" }
-  | { name: "monitoring" }
-  | { name: "models" };
-
-function parseHash(hash: string): Route {
-  const h = (hash || "").replace(/^#/, "");
-  const p = h.replace(/^\/+/, "");
-  if (!p || p === "configuration") return { name: "configuration" };
-  if (p === "monitoring") return { name: "monitoring" };
-  if (p === "models") return { name: "models" };
-  // phase 3.5: drop model detail route; keep hash compatibility by redirecting
-  if (p.startsWith("models/")) return { name: "models" };
-  return { name: "configuration" };
-}
-
-function setHash(path: string) {
-  const next = path.startsWith("#") ? path : `#/${path.replace(/^\/+/, "")}`;
-  if (window.location.hash === next) return;
-  window.location.hash = next;
-}
+import { parseAppHash, setHash } from "./lib/hashRoute";
 
 export function App() {
   const [range, setRange] = useState<RangeKey>("15m");
@@ -36,7 +17,7 @@ export function App() {
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
 
-  const route = useMemo(() => parseHash(hash), [hash]);
+  const route = useMemo(() => parseAppHash(hash), [hash]);
 
   return (
     <div className="shell">
@@ -64,6 +45,20 @@ export function App() {
           >
             Models
           </button>
+          <button
+            type="button"
+            className={`navItem ${route.name === "playground" ? "active" : ""}`}
+            onClick={() => setHash("playground")}
+          >
+            Playground
+          </button>
+          <button
+            type="button"
+            className={`navItem ${route.name === "probe" ? "active" : ""}`}
+            onClick={() => setHash("probe")}
+          >
+            Endpoint probe
+          </button>
         </nav>
       </aside>
 
@@ -71,6 +66,10 @@ export function App() {
         {route.name === "configuration" && <ConfigurationPage />}
         {route.name === "monitoring" && <MonitoringPage range={range} onRangeChange={setRange} />}
         {route.name === "models" && <ModelsPage />}
+        {route.name === "playground" && (
+          <PlaygroundPage hashModelId={route.query.model} hashKey={hash} />
+        )}
+        {route.name === "probe" && <ProbePage />}
       </main>
     </div>
   );

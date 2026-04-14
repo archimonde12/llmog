@@ -1,6 +1,7 @@
 import { LlmAdapter } from "./base";
 import { mergeModelOutboundHeaders } from "../config/mergeHeaders";
 import { joinUrl, postJson, postJsonStream } from "../http";
+import { usageFromOllamaGenerateWithRawFallback } from "../observability/tokenUsage";
 import { ModelConfig, OpenAIChatCompletionsRequest } from "../types";
 
 function headersToRecord(headers: Headers): Record<string, string> {
@@ -49,6 +50,8 @@ export function createOllamaAdapter(cfg: ModelConfig): LlmAdapter {
           ? String((res.json as any).response ?? "")
           : "";
 
+      const promptText = messagesToPrompt(req);
+      const usage = usageFromOllamaGenerateWithRawFallback(res.json, promptText, content);
       const openaiLike = {
         id: `chatcmpl_ollama_${Date.now()}`,
         object: "chat.completion",
@@ -61,6 +64,7 @@ export function createOllamaAdapter(cfg: ModelConfig): LlmAdapter {
             finish_reason: "stop",
           },
         ],
+        usage,
       };
 
       return {
@@ -100,6 +104,8 @@ export function createOllamaAdapter(cfg: ModelConfig): LlmAdapter {
           const created = Math.floor(Date.now() / 1000);
           let sentRole = false;
           let buffer = "";
+          let completionAcc = "";
+          const promptText = messagesToPrompt(req);
 
           const writeSse = (data: unknown) => {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
@@ -156,6 +162,7 @@ export function createOllamaAdapter(cfg: ModelConfig): LlmAdapter {
                     : "";
 
                 if (deltaText) {
+                  completionAcc += deltaText;
                   writeSse({
                     id,
                     object: "chat.completion.chunk",
@@ -168,12 +175,18 @@ export function createOllamaAdapter(cfg: ModelConfig): LlmAdapter {
                 }
 
                 if (obj?.done) {
+                  const usage = usageFromOllamaGenerateWithRawFallback(
+                    obj,
+                    promptText,
+                    completionAcc,
+                  );
                   writeSse({
                     id,
                     object: "chat.completion.chunk",
                     created,
                     model: cfg.model,
                     choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+                    usage,
                   });
                   controller.enqueue(encoder.encode("data: [DONE]\n\n"));
                   controller.close();

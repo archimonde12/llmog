@@ -7,6 +7,40 @@ on:
   pull_request:
 
 jobs:
+  visual-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build UI
+        run: npm run build:ui
+
+      - name: Install Playwright Chromium + system deps
+        run: npx playwright install --with-deps chromium
+
+      - name: Visual regression tests
+        run: npx playwright test tests/e2e/visual.spec.ts
+
+      - name: Upload Playwright report and diff artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-vrt-failure
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+
   build-test-pack:
     runs-on: ubuntu-latest
     steps:

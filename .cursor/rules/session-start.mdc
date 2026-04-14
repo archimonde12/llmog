@@ -1,0 +1,24 @@
+---
+description: Project context and working habits - read at session start
+alwaysApply: true
+---
+
+# Session Start
+
+## Goals
+- Keep a consistent working flow: **issue -> brainstorm -> decision -> plan -> implementation**.
+- Prefer small diffs, clear ownership, and risk-appropriate verification.
+
+## Standard Flow (5 Steps)
+1. Issue / request
+2. Brainstorm
+3. Decision (ADR)
+4. Plan
+5. Implementation
+
+## Mandatory Gates
+- Gate 1: Before detailed planning, ADR is required for significant changes.
+- Gate 2: Before implementation, a confirmed plan or an explicit implementation command is required.
+
+## AskQuestion Gate
+- For non-trivial tasks: ask 1-2 critical clarification questions before deep analysis or implementation.

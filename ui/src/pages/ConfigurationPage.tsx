@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Drawer } from "../components/Drawer";
 import { apiGet, apiPost, apiPut } from "../lib/api";
+import { setHash } from "../lib/hashRoute";
 
 type Adapter = "ollama" | "openai_compatible" | "deepseek";
 
@@ -53,6 +54,8 @@ type PutConfigResponse = {
 
 type TestResp = { ok: boolean; status: number; message: string; baseUrl: string };
 
+type DiscoverResp = { ok: boolean; models: string[]; message?: string; status?: number };
+
 const LS_TEST_STATUS = "llmog:config:testStatus:v1";
 const RELOAD_COOLDOWN_MS = 2000;
 const TEST_ALL_COOLDOWN_MS = 2000;
@@ -73,12 +76,18 @@ function envNameFromRef(ref: string): string {
   return m?.[1] ?? "";
 }
 
-function mkNewModel(): ModelConfig {
+function mkNewModel(usedIds: Set<string>): ModelConfig {
+  let n = Date.now();
+  let id = `model-${n}`;
+  while (usedIds.has(id)) {
+    n += 1;
+    id = `model-${n}`;
+  }
   return {
-    id: "",
+    id,
     adapter: "openai_compatible",
-    baseUrl: "",
-    model: "",
+    baseUrl: "https://api.openai.com",
+    model: "gpt-4o-mini",
     timeoutMs: undefined,
   };
 }
@@ -234,6 +243,12 @@ export function ConfigurationPage() {
   const [testAllCooldown, setTestAllCooldown] = useState(false);
   const [reloadCooldown, setReloadCooldown] = useState(false);
 
+  const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverErr, setDiscoverErr] = useState<string | null>(null);
+  const [discoverApiKey, setDiscoverApiKey] = useState("");
+  const discoverBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const modelsRef = useRef<ModelConfig[]>([]);
   const testAllInFlight = useRef(false);
   const testAllCooldownRef = useRef(false);
@@ -248,6 +263,14 @@ export function ConfigurationPage() {
     () => models.find((m) => (m._uiKey ?? m.id) === selectedKey) ?? null,
     [models, selectedKey],
   );
+
+  const selectedRowKey = selected ? (selected._uiKey ?? selected.id) : "";
+
+  useEffect(() => {
+    setDiscoveredModels([]);
+    setDiscoverErr(null);
+    setDiscoverLoading(false);
+  }, [selectedKey]);
 
   /** Sync API key UI mode from row when selection or server config generation changes. */
   useEffect(() => {
@@ -348,12 +371,62 @@ export function ConfigurationPage() {
   );
 
   const addModel = useCallback(() => {
-    const draft = mkNewModel();
     const tmpKey = `__new__${Date.now()}`;
-    draft._uiKey = tmpKey;
-    setModels((prev) => [draft, ...prev]);
+    setModels((prev) => {
+      const used = new Set(prev.map((m) => (m.id ?? "").trim()).filter(Boolean));
+      const draft = mkNewModel(used);
+      draft._uiKey = tmpKey;
+      return [draft, ...prev];
+    });
     setSelectedKey(tmpKey);
   }, []);
+
+  const runDiscover = useCallback(async () => {
+    if (!selected) return;
+    const baseUrl = (selected.baseUrl ?? "").trim();
+    if (!baseUrl) {
+      setDiscoverErr("Set a base URL first");
+      return;
+    }
+    setDiscoverErr(null);
+    setDiscoverLoading(true);
+    try {
+      const r = await apiPost<DiscoverResp>("/admin/discover-upstream-models", {
+        adapter: selected.adapter,
+        baseUrl,
+        apiKey: discoverApiKey.trim() || undefined,
+      });
+      if (!r.ok) {
+        setDiscoveredModels([]);
+        setDiscoverErr(r.message ?? "Could not list models");
+        return;
+      }
+      setDiscoveredModels(r.models ?? []);
+      if ((r.models?.length ?? 0) > 0 && !(selected.model ?? "").trim()) {
+        updateSelected({ model: r.models![0]! });
+      }
+    } catch (e: unknown) {
+      setDiscoveredModels([]);
+      setDiscoverErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDiscoverLoading(false);
+    }
+  }, [selected, discoverApiKey, updateSelected]);
+
+  const scheduleDiscoverFromBlur = useCallback(() => {
+    if (discoverBlurTimer.current) clearTimeout(discoverBlurTimer.current);
+    discoverBlurTimer.current = setTimeout(() => {
+      discoverBlurTimer.current = null;
+      void runDiscover();
+    }, 550);
+  }, [runDiscover]);
+
+  useEffect(
+    () => () => {
+      if (discoverBlurTimer.current) clearTimeout(discoverBlurTimer.current);
+    },
+    [],
+  );
 
   const deleteSelected = useCallback(() => {
     if (!selected) return;
@@ -729,6 +802,13 @@ export function ConfigurationPage() {
 
   const dotenvPathDisplay = env?.dotenvPath ?? "";
 
+  const playgroundStatus = selected ? statusById[selectedRowKey] : undefined;
+  const canOpenPlayground =
+    Boolean(selected?.id?.trim()) &&
+    playgroundStatus?.ok === true &&
+    !playgroundStatus?.loading &&
+    rowTesting !== selectedRowKey;
+
   return (
     <div className="page">
       <div className="topbar">
@@ -847,6 +927,22 @@ export function ConfigurationPage() {
             <div className="panelTitle">Edit model</div>
             <div className="panelHint">{selected ? selected.id || "(draft)" : "Select a model"}</div>
             <div className="spacer" />
+            <button
+              type="button"
+              className={`btn mini${canOpenPlayground ? " btnPrimary" : ""}`}
+              disabled={!canOpenPlayground}
+              title={
+                canOpenPlayground
+                  ? "Open Playground with this model selected"
+                  : "Save config and wait for connection test OK to enable"
+              }
+              onClick={() => {
+                if (!selected?.id.trim()) return;
+                setHash(`playground?model=${encodeURIComponent(selected.id.trim())}`);
+              }}
+            >
+              Playground
+            </button>
             <button type="button" className="btn btnDanger mini" onClick={deleteSelected} disabled={!selected}>
               Delete
             </button>
@@ -876,19 +972,67 @@ export function ConfigurationPage() {
 
               <label className="field">
                 <span className="fieldLabel">Base URL</span>
-                <input
-                  value={selected.baseUrl}
-                  onChange={(e) => updateSelected({ baseUrl: e.target.value })}
-                  placeholder="http://localhost:11434"
-                />
+                <div className="row" style={{ marginBottom: 0, alignItems: "stretch", gap: "0.5rem", width: "100%" }}>
+                  <input
+                    style={{ flex: 1, minWidth: "8rem" }}
+                    value={selected.baseUrl}
+                    onChange={(e) => updateSelected({ baseUrl: e.target.value })}
+                    onBlur={() => scheduleDiscoverFromBlur()}
+                    placeholder="http://localhost:11434"
+                  />
+                  <button
+                    type="button"
+                    className="btn mini"
+                    disabled={discoverLoading}
+                    onClick={() => void runDiscover()}
+                  >
+                    {discoverLoading ? "Fetching…" : "Fetch models"}
+                  </button>
+                </div>
+                {discoverErr ? (
+                  <div className="alert err" style={{ marginTop: "0.4rem", fontSize: "0.82rem" }}>
+                    {discoverErr}
+                  </div>
+                ) : null}
               </label>
+
+              {(selected.adapter === "openai_compatible" || selected.adapter === "deepseek") && (
+                <label className="field">
+                  <span className="fieldLabel">Discovery API key (optional, not saved)</span>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={discoverApiKey}
+                    onChange={(e) => setDiscoverApiKey(e.target.value)}
+                    placeholder="Bearer token for listing /v1/models only"
+                  />
+                </label>
+              )}
 
               <label className="field">
                 <span className="fieldLabel">Model</span>
+                {discoveredModels.length > 0 ? (
+                  <select
+                    value={discoveredModels.includes(selected.model) ? selected.model : "__custom__"}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "__custom__") return;
+                      updateSelected({ model: v });
+                    }}
+                  >
+                    {discoveredModels.map((id) => (
+                      <option key={id} value={id}>
+                        {id}
+                      </option>
+                    ))}
+                    <option value="__custom__">Custom…</option>
+                  </select>
+                ) : null}
                 <input
+                  style={{ marginTop: discoveredModels.length > 0 ? "0.4rem" : 0 }}
                   value={selected.model}
                   onChange={(e) => updateSelected({ model: e.target.value })}
-                  placeholder="llama3 / gpt-4o-mini / ..."
+                  placeholder="llama3 / gpt-4o-mini / …"
                 />
               </label>
 

@@ -17,6 +17,13 @@ import { probeModelUpstream } from "../upstreamProbe";
 import type { ModelRequestStore } from "../observability/modelRequestStore";
 import type { ModelMessageDebugStore, MessageDebugRole } from "../observability/modelMessageDebugStore";
 import { applyEnvUpdates, listEnvKeys, listEntriesInDotenvFile, listKeysInDotenvFile, resolveDotenvPath } from "./envStore";
+import {
+  parsePlaygroundTemplatesJson,
+  readPlaygroundTemplatesFile,
+  resolvePlaygroundTemplatesWriteTarget,
+  writePlaygroundTemplatesFileAtomic,
+} from "./playgroundTemplatesStore";
+import { discoverUpstreamModels } from "./upstreamDiscover";
 
 function parseRange(raw: unknown): { ok: true; ms: number; label: "15m" | "1h" | "24h" } | { ok: false } {
   const v = String(raw ?? "").trim();
@@ -133,6 +140,51 @@ export async function registerAdminRoutes(
     ui: true,
     activeConfigPath: ctx.state.activeConfigPath,
   }));
+
+  app.get("/admin/playground/templates", { preHandler: guard }, async (_req, reply) => {
+    const wt = await resolvePlaygroundTemplatesWriteTarget(ctx.state.activeConfigPath);
+    try {
+      const data = await readPlaygroundTemplatesFile(wt.writeTarget);
+      return {
+        ...data,
+        loadedFromPath: wt.writeTarget,
+        usedAlternateWritePath: wt.usedAlternate,
+      };
+    } catch (err: any) {
+      reply.code(500);
+      return {
+        error: {
+          message: err?.message ?? String(err),
+        },
+      };
+    }
+  });
+
+  app.put("/admin/playground/templates", { preHandler: guard }, async (req, reply) => {
+    const parsed = parsePlaygroundTemplatesJson(req.body);
+    if (!parsed.ok) {
+      reply.code(400);
+      return { error: { message: "Validation failed", issues: parsed.issues } };
+    }
+
+    const wt = await resolvePlaygroundTemplatesWriteTarget(ctx.state.activeConfigPath);
+    try {
+      await writePlaygroundTemplatesFileAtomic(wt.writeTarget, parsed.data);
+    } catch (err: any) {
+      reply.code(500);
+      return {
+        error: {
+          message: `Failed to write playground templates: ${err?.message ?? String(err)}`,
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      writtenTo: wt.writeTarget,
+      usedAlternateWritePath: wt.usedAlternate,
+    };
+  });
 
   app.get("/admin/config", { preHandler: guard }, async () => {
     const wt = await resolveWriteTarget(ctx.state.activeConfigPath);
@@ -256,6 +308,31 @@ export async function registerAdminRoutes(
       message: result.message,
       baseUrl: body.baseUrl.replace(/\/+$/, ""),
     };
+  });
+
+  const DiscoverBodySchema = z.object({
+    adapter: z.enum(["ollama", "openai_compatible", "deepseek"]),
+    baseUrl: z.string().min(1),
+    apiKey: z.string().optional(),
+    timeoutMs: z.number().int().positive().max(60_000).optional(),
+  });
+
+  app.post("/admin/discover-upstream-models", { preHandler: guard }, async (req, reply) => {
+    const parsed = DiscoverBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return {
+        error: {
+          message: "Invalid body",
+          issues: parsed.error.issues.map((i) => ({
+            path: i.path.join("."),
+            message: i.message,
+          })),
+        },
+      };
+    }
+    const result = await discoverUpstreamModels(parsed.data);
+    return result;
   });
 
   app.get("/admin/metrics/summary", { preHandler: guard }, async () => {
