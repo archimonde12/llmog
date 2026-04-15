@@ -170,22 +170,22 @@ test.beforeEach(async ({ page }) => {
 test.describe("UI visual regression (hash routes)", () => {
   test("configuration", async ({ page }) => {
     await page.goto("/ui/#/configuration");
-    await expect(page.locator(".page .topbarTitle")).toHaveText("Configuration");
+    await expect(page.locator("main h1").first()).toHaveText("Configuration");
     await expect(page.getByText("Loading…")).toHaveCount(0);
     await expect(page).toHaveScreenshot("configuration.png", { fullPage: true });
   });
 
   test("monitoring", async ({ page }) => {
     await page.goto("/ui/#/monitoring");
-    await expect(page.locator(".page .topbarTitle")).toHaveText("Monitoring");
+    await expect(page.locator("main h1").first()).toHaveText("Monitoring");
     await expect(page.getByText("Loading…")).toHaveCount(0);
-    await expect(page.locator(".gridCards")).toBeVisible();
+    await expect(page.getByText("Total requests")).toBeVisible();
     await expect(page).toHaveScreenshot("monitoring.png", { fullPage: true });
   });
 
   test("models", async ({ page }) => {
     await page.goto("/ui/#/models");
-    await expect(page.locator(".page .topbarTitle")).toHaveText("Models");
+    await expect(page.locator("main h1").first()).toHaveText("Models");
     await expect(page.getByRole("cell", { name: "demo-model" })).toBeVisible();
     await expect(page.getByText("Hello snapshot")).toBeVisible();
     await expect(page).toHaveScreenshot("models.png", { fullPage: true });
@@ -193,9 +193,9 @@ test.describe("UI visual regression (hash routes)", () => {
 
   test("playground", async ({ page }) => {
     await page.goto("/ui/#/playground");
-    await expect(page.locator(".page .topbarTitle")).toHaveText("Playground");
+    await expect(page.locator("main h1").first()).toHaveText("Playground");
     await expect(page.getByText("Loading templates…")).toHaveCount(0);
-    await expect(page.locator("select.modelPill")).toBeEnabled();
+    await expect(page.getByTestId("pg-model-trigger")).toBeEnabled();
     await page.getByRole("button", { name: "Templates library" }).click();
     await expect(page.getByText("Snapshot template")).toBeVisible();
     await expect(page).toHaveScreenshot("playground.png", { fullPage: true });
@@ -203,7 +203,7 @@ test.describe("UI visual regression (hash routes)", () => {
 
   test("endpoint probe", async ({ page }) => {
     await page.goto("/ui/#/probe");
-    await expect(page.locator(".page .topbarTitle")).toHaveText("Endpoint probe");
+    await expect(page.locator("main h1").first()).toHaveText("Endpoint probe");
     await expect(page.getByRole("button", { name: "Fetch models" })).toBeVisible();
     await expect(page).toHaveScreenshot("probe.png", { fullPage: true });
   });

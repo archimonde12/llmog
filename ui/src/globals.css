@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 6% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 263 70% 58%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 4% 16%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 263 70% 50%;
+    --radius: 0.625rem;
+    --chart-in: 199 89% 48%;
+    --chart-out: 263 70% 65%;
+    --chart-ok: 142 76% 45%;
+    --chart-err: 0 84% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply min-h-screen bg-background font-sans text-foreground antialiased;
+  }
+}
+
+/* Playground message composer: Cursor/VS Code–like overlay scrollbar */
+@layer components {
+  .pg-message-composer {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.45) transparent;
+    /* Stronger caret on dark composer (color + width where supported) */
+    caret-width: 3px;
+  }
+
+  .pg-message-composer::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .pg-message-composer::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .pg-message-composer::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    background-color: hsl(var(--muted-foreground) / 0.3);
+  }
+
+  .pg-message-composer:hover::-webkit-scrollbar-thumb,
+  .pg-message-composer:focus-visible::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.55);
+  }
+}

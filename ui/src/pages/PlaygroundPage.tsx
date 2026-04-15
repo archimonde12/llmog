@@ -1,6 +1,21 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import { Bot, Box, ChevronDown, Cloud, Cpu, Plus, Send, Sparkles, Trash2 } from "lucide-react";
 import { apiGet, apiPut } from "../lib/api";
 import { streamChatCompletions } from "../lib/chatCompletionStream";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import { cn } from "@/lib/utils";
 
 type ModelListItem = { id: string; object?: string; owned_by?: string };
 
@@ -39,6 +54,8 @@ type PlaygroundSession = {
 
 const LS_SESSIONS = "llmog:playground:sessions:v1";
 const LS_ACTIVE = "llmog:playground:activeSession:v1";
+
+const COMPOSER_MAX_HEIGHT_PX = 192;
 
 function randomId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -90,6 +107,15 @@ function loadPersistedSessions(): { sessions: PlaygroundSession[]; activeId: str
   }
 }
 
+function modelProviderIcon(model: ModelListItem): LucideIcon {
+  const t = `${model.id} ${model.owned_by ?? ""}`.toLowerCase();
+  if (t.includes("openai") || t.includes("gpt")) return Sparkles;
+  if (t.includes("anthropic") || t.includes("claude")) return Bot;
+  if (t.includes("google") || t.includes("gemini")) return Cloud;
+  if (t.includes("meta") || t.includes("llama")) return Cpu;
+  return Box;
+}
+
 type PlaygroundPageProps = {
   hashModelId?: string;
   /** Full hash string so we re-apply ?model= when user navigates again. */
@@ -98,6 +124,7 @@ type PlaygroundPageProps = {
 
 export function PlaygroundPage(props: PlaygroundPageProps) {
   const { hashModelId, hashKey } = props;
+  const prefersReducedMotion = usePrefersReducedMotion();
 
   const [modelsLoading, setModelsLoading] = useState(true);
   const [modelsErr, setModelsErr] = useState<string | null>(null);
@@ -118,11 +145,12 @@ export function PlaygroundPage(props: PlaygroundPageProps) {
     return "";
   });
 
-  const [systemOpen, setSystemOpen] = useState(true);
+  const [systemOpen, setSystemOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
+  const [messageComposerFocused, setMessageComposerFocused] = useState(false);
 
   const [newTemplateName, setNewTemplateName] = useState("");
   const [saveHint, setSaveHint] = useState<string | null>(null);
@@ -131,6 +159,7 @@ export function PlaygroundPage(props: PlaygroundPageProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const templatesPopoverRef = useRef<HTMLDivElement | null>(null);
   const appliedHashRef = useRef<string | null>(null);
+  const messageTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) ?? sessions[0] ?? null,
@@ -151,17 +180,28 @@ export function PlaygroundPage(props: PlaygroundPageProps) {
         return prev.map((s) =>
           s.id === id
             ? {
-                ...s,
-                ...patch,
-                updatedAt: Date.now(),
-                ...(patch.messages ? { title: firstUserTitle(patch.messages) } : {}),
-              }
+              ...s,
+              ...patch,
+              updatedAt: Date.now(),
+              ...(patch.messages ? { title: firstUserTitle(patch.messages) } : {}),
+            }
             : s,
         );
       });
     },
     [activeSessionId],
   );
+
+  const adjustComposerHeight = useCallback(() => {
+    const el = messageTextareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(42, COMPOSER_MAX_HEIGHT_PX)}px`;
+  }, []);
+
+  useLayoutEffect(() => {
+    adjustComposerHeight();
+  }, [input, adjustComposerHeight]);
 
   useEffect(() => {
     if (!sessions.length) {
@@ -245,6 +285,43 @@ export function PlaygroundPage(props: PlaygroundPageProps) {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [templatesOpen]);
 
+  const focusMessageComposer = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      messageTextareaRef.current?.focus();
+    });
+  }, []);
+
+  useEffect(() => {
+    if (modelsLoading || !modelId) return;
+    const id = window.requestAnimationFrame(() => {
+      messageTextareaRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [modelsLoading, modelId, activeSessionId]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+        focusMessageComposer();
+        return;
+      }
+      if (e.key === "/" && !mod) {
+        const target = e.target as HTMLElement | null;
+        if (!target) return;
+        if (target.isContentEditable) return;
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        e.preventDefault();
+        focusMessageComposer();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusMessageComposer]);
+
   const scrollToBottom = useCallback(() => {
     queueMicrotask(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
   }, []);
@@ -279,7 +356,8 @@ export function PlaygroundPage(props: PlaygroundPageProps) {
     const s = emptySession(first);
     setSessions((prev) => [s, ...prev]);
     setActiveSessionId(s.id);
-  }, [modelOptions]);
+    focusMessageComposer();
+  }, [modelOptions, focusMessageComposer]);
 
   const selectSession = useCallback(
     (id: string) => {
@@ -288,8 +366,9 @@ export function PlaygroundPage(props: PlaygroundPageProps) {
       setSendErr(null);
       setInput("");
       setActiveSessionId(id);
+      focusMessageComposer();
     },
-    [activeSessionId],
+    [activeSessionId, focusMessageComposer],
   );
 
   const deleteSession = useCallback(
@@ -465,238 +544,355 @@ export function PlaygroundPage(props: PlaygroundPageProps) {
     return m?.id ?? modelId;
   }, [modelOptions, modelId]);
 
+  const activeModel = useMemo(() => modelOptions.find((x) => x.id === modelId), [modelOptions, modelId]);
+  const ModelGlyph = useMemo(() => modelProviderIcon(activeModel ?? { id: modelId }), [activeModel, modelId]);
+
   const sortedSessions = useMemo(
     () => [...sessions].sort((a, b) => b.updatedAt - a.updatedAt),
     [sessions],
   );
 
+  const systemSummary = useMemo(() => {
+    const t = systemPrompt.trim().replace(/\s+/g, " ");
+    if (!t) return "No system message (optional)";
+    return t.length > 88 ? `${t.slice(0, 87)}…` : t;
+  }, [systemPrompt]);
+
+  const tempSlider = useMemo(() => {
+    const n = Number(temperature);
+    if (temperature === "" || Number.isNaN(n)) return 1;
+    return Math.min(2, Math.max(0, n));
+  }, [temperature]);
+
+  const maxSlider = useMemo(() => {
+    const n = Number(maxTokens);
+    if (maxTokens === "" || Number.isNaN(n)) return 2048;
+    return Math.min(8192, Math.max(1, Math.floor(n)));
+  }, [maxTokens]);
+
+  const sliderTone = {
+    trackClassName: "bg-muted",
+    rangeClassName: "bg-primary",
+    thumbClassName:
+      "border-2 border-primary-foreground/40 bg-primary shadow-md hover:bg-primary/90 focus-visible:ring-primary",
+  };
+
+  const hasMessages = messages.length > 0;
+
   return (
-    <div className="page playgroundPage">
-      <div className="playgroundLayout">
-        <aside className="playgroundSidebar panel">
-          <div className="playgroundSidebarHead">
-            <div className="panelTitle">Chats</div>
-            <button type="button" className="btn mini" onClick={newChat}>
-              New chat
-            </button>
+    <div className="playground-page flex min-h-[calc(100vh-4rem)] flex-col gap-4">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,14rem)_1fr]">
+        <aside
+          className={cn(
+            "flex flex-col gap-3 rounded-xl border border-border bg-card p-3 text-card-foreground shadow-sm lg:min-h-0",
+            messageComposerFocused &&
+            "[&_.pg-session-list]:opacity-60 hover:[&_.pg-session-list]:opacity-100",
+          )}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">Chats</h2>
           </div>
-          <div className="muted playgroundSidebarHint">History (stored in this browser)</div>
-          <div className="playgroundTemplateList playgroundSessionList">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mb-6 w-full justify-center gap-2 border-border/60 bg-transparent text-muted-foreground shadow-none transition-colors hover:border-border hover:bg-muted/30 hover:text-foreground/90"
+            onClick={newChat}
+          >
+            <Plus className="size-4 shrink-0" aria-hidden />
+            New chat
+          </Button>
+          <p className="text-xs text-muted-foreground">History (stored in this browser)</p>
+          <div className="pg-session-list flex min-h-0 flex-1 flex-col overflow-y-auto transition-opacity duration-200 ease-out">
             {sortedSessions.map((s) => (
-              <div key={s.id} className="playgroundTemplateRow">
+              <div key={s.id} className="group flex items-stretch gap-0 border-b border-border/60 py-1 last:border-b-0">
                 <button
                   type="button"
-                  className={`listItem playgroundTemplateBtn ${s.id === activeSessionId ? "playgroundSessionActive" : ""}`}
                   onClick={() => selectSession(s.id)}
+                  className={cn(
+                    "min-w-0 flex-1 truncate rounded-md px-2 py-2 text-left text-sm transition-colors",
+                    s.id === activeSessionId
+                      ? "bg-primary/40 text-foreground"
+                      : "text-foreground/90 hover:bg-white/[0.04]",
+                  )}
                 >
-                  <span className="playgroundSessionTitle">{s.title || "New chat"}</span>
+                  {s.title || "New chat"}
                 </button>
-                <button
+                <Button
                   type="button"
-                  className="btn mini btnDanger"
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0 text-destructive opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                   title="Delete chat"
                   onClick={() => deleteSession(s.id)}
                 >
-                  ×
-                </button>
+                  <Trash2 className="size-4" aria-hidden />
+                </Button>
               </div>
             ))}
           </div>
         </aside>
 
-        <section className="playgroundMain">
-          <div className="playgroundTop">
-            <div className="topbar playgroundTopbar">
-              <div className="topbarTitle">Playground</div>
-              <div className="spacer" />
-              <label className="field playgroundModelField">
-                <span className="fieldLabel">Model</span>
-                <select
-                  className="modelPill"
-                  value={modelId}
-                  onChange={(e) => updateActiveSession({ modelId: e.target.value })}
-                  disabled={modelsLoading || !modelOptions.length}
-                >
-                  {modelOptions.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-border p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-lg font-semibold tracking-tight">Playground</h1>
             </div>
-            {modelsErr ? <div className="alert err">{modelsErr}</div> : null}
+            {modelsErr ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{modelsErr}</div>
+            ) : null}
             {!modelsLoading && !modelsErr && !modelOptions.length ? (
-              <div className="alert err">No models configured. Add models in Configuration.</div>
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                No models configured. Add models in Configuration.
+              </div>
             ) : null}
 
-            <div className="playgroundParams">
-              <label className="field">
-                <span className="fieldLabel">Temperature</span>
-                <input
-                  type="number"
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-8">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <Label htmlFor="pg-temp" className="w-[5.5rem] shrink-0 text-xs font-medium text-muted-foreground">
+                  Temperature
+                </Label>
+                <Slider
+                  id="pg-temp"
+                  className="w-28 shrink-0"
+                  value={[tempSlider]}
                   min={0}
                   max={2}
-                  step={0.1}
-                  placeholder="default"
+                  step={0.05}
+                  {...sliderTone}
+                  onValueChange={(v) => updateActiveSession({ temperature: String(v[0] ?? 0) })}
+                />
+                <Input
+                  id="pg-temp-input"
+                  className="h-8 max-w-[4.75rem] shrink-0 font-mono text-xs"
+                  inputMode="decimal"
+                  placeholder="—"
                   value={temperature}
                   onChange={(e) => updateActiveSession({ temperature: e.target.value })}
+                  aria-label="Temperature exact value"
                 />
-              </label>
-              <label className="field">
-                <span className="fieldLabel">Max tokens</span>
-                <input
-                  type="number"
+                <span className="hidden min-w-0 truncate text-xs text-muted-foreground sm:inline">
+                  {temperature === "" || Number.isNaN(Number(temperature)) ? "default (not sent)" : temperature}
+                </span>
+              </div>
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <Label htmlFor="pg-max" className="w-[5.5rem] shrink-0 text-xs font-medium text-muted-foreground">
+                  Max tokens
+                </Label>
+                <Slider
+                  id="pg-max"
+                  className="w-28 shrink-0"
+                  value={[maxSlider]}
                   min={1}
-                  step={1}
-                  placeholder="default"
+                  max={8192}
+                  step={64}
+                  {...sliderTone}
+                  onValueChange={(v) => updateActiveSession({ maxTokens: String(v[0] ?? 2048) })}
+                />
+                <Input
+                  id="pg-max-input"
+                  className="h-8 max-w-[4.75rem] shrink-0 font-mono text-xs"
+                  inputMode="numeric"
+                  placeholder="—"
                   value={maxTokens}
                   onChange={(e) => updateActiveSession({ maxTokens: e.target.value })}
+                  aria-label="Max tokens exact value"
                 />
-              </label>
+                <span className="hidden min-w-0 truncate text-xs text-muted-foreground sm:inline">
+                  {maxTokens === "" || Number.isNaN(Number(maxTokens)) ? "default (not sent)" : maxSlider}
+                </span>
+              </div>
             </div>
 
-            <div className="playgroundSystem">
-              <div className="playgroundSystemHead">
-                <button
-                  type="button"
-                  className="playgroundSystemToggle"
-                  onClick={() => setSystemOpen((v) => !v)}
-                  aria-expanded={systemOpen}
-                >
-                  System instruction {systemOpen ? "▼" : "\u25b6"}
-                </button>
-                <div className="playgroundTemplatesAnchor" ref={templatesPopoverRef}>
-                  <button
+            <Collapsible open={systemOpen} onOpenChange={setSystemOpen}>
+              <div className="flex flex-wrap items-start gap-2">
+                <CollapsibleTrigger className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border border-border/80 bg-muted/10 px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-muted/20">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-foreground">System instruction</span>
+                    {!systemOpen ? <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">{systemSummary}</span> : null}
+                  </span>
+                  <span className="shrink-0 text-muted-foreground">{systemOpen ? "▼" : "▶"}</span>
+                </CollapsibleTrigger>
+                <div className="relative shrink-0" ref={templatesPopoverRef}>
+                  <Button
                     type="button"
-                    className={`btn mini playgroundTemplatesBtn${templatesOpen ? " modeOn" : ""}`}
+                    size="sm"
+                    variant={templatesOpen ? "secondary" : "outline"}
                     aria-expanded={templatesOpen}
                     aria-label="Templates library"
                     title="Templates"
                     onClick={() => setTemplatesOpen((v) => !v)}
                   >
-                    <span aria-hidden className="playgroundTplGlyph">
-                      {String.fromCodePoint(0x1f4da)}
-                    </span>{" "}
                     Templates
-                  </button>
+                  </Button>
                   {templatesOpen ? (
-                    <div className="playgroundTemplatesPopover panel">
-                      <div className="muted playgroundSidebarHint">Templates</div>
-                      {templatesLoading ? (
-                        <div className="muted">Loading templates…</div>
-                      ) : templatesErr ? (
-                        <div className="alert err">{templatesErr}</div>
+                    <div className="absolute right-0 z-20 mt-1 w-72 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-lg">
+                      <p className="text-xs text-muted-foreground">Templates</p>
+                      {templatesLoading ? <div className="mt-2 text-xs text-muted-foreground">Loading templates…</div> : null}
+                      {templatesErr ? (
+                        <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">{templatesErr}</div>
                       ) : null}
-                      <div className="playgroundTemplateList">
+                      <div className="mt-2 flex max-h-48 flex-col gap-1 overflow-y-auto">
                         {templates.map((t) => (
-                          <div key={t.id} className="playgroundTemplateRow">
+                          <div key={t.id} className="flex items-center gap-1">
                             <button
                               type="button"
-                              className="listItem playgroundTemplateBtn"
+                              className="min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-xs font-mono hover:bg-muted"
                               onClick={() => applyTemplate(t)}
                             >
-                              <span className="mono">{t.name}</span>
+                              {t.name}
                             </button>
-                            <button
-                              type="button"
-                              className="btn mini btnDanger"
-                              title="Delete template"
-                              onClick={() => void deleteTemplate(t.id)}
-                            >
+                            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive" title="Delete template" onClick={() => void deleteTemplate(t.id)}>
                               ×
-                            </button>
+                            </Button>
                           </div>
                         ))}
-                        {!templates.length && !templatesLoading ? (
-                          <div className="muted">No saved templates yet.</div>
-                        ) : null}
+                        {!templates.length && !templatesLoading ? <div className="text-xs text-muted-foreground">No saved templates yet.</div> : null}
                       </div>
-                      <div className="playgroundSaveTpl">
-                        <input
+                      <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+                        <Input
                           type="text"
                           placeholder="Template name"
                           value={newTemplateName}
                           onChange={(e) => setNewTemplateName(e.target.value)}
                           aria-label="New template name"
                         />
-                        <button
-                          type="button"
-                          className="btn mini btnPrimary"
-                          onClick={() => void saveAsTemplate()}
-                        >
+                        <Button type="button" size="sm" onClick={() => void saveAsTemplate()}>
                           Save as template
-                        </button>
-                        {saveHint ? <div className="muted playgroundSaveHint">{saveHint}</div> : null}
+                        </Button>
+                        {saveHint ? <p className="text-xs text-muted-foreground">{saveHint}</p> : null}
                       </div>
                     </div>
                   ) : null}
                 </div>
               </div>
-              {systemOpen ? (
+              <CollapsibleContent className="mt-2 overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
                 <textarea
-                  className="playgroundSystemText"
+                  className="min-h-[6rem] w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   placeholder="Optional system message (sent as the first message when non-empty)"
                   value={systemPrompt}
                   onChange={(e) => updateActiveSession({ systemPrompt: e.target.value })}
                   rows={4}
                 />
-              ) : null}
-            </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
 
-          <div className="playgroundChatWrap">
-            <div className="playgroundMessages">
-              {!messages.length ? (
-                <div className="muted playgroundEmpty">Send a message to start. Model: {modelLabel || "—"}</div>
-              ) : null}
-              {messages.map((m, i) => (
-                <div key={i} className={`playgroundMsg playgroundMsg--${m.role}`}>
-                  <div className="playgroundMsgMeta">
-                    <span
-                      className={`pill ${m.role === "user" ? "user" : m.role === "assistant" ? "assistant" : "system"}`}
-                    >
-                      {m.role}
-                    </span>
-                  </div>
-                  <pre className="playgroundMsgBody">
-                    {m.content || (streaming && i === messages.length - 1 ? "…" : "")}
-                  </pre>
+          <div className="flex min-h-0 flex-1 flex-col">
+            {hasMessages ? (
+              <div className="flex min-h-0 flex-1 flex-col space-y-3 overflow-y-auto p-4">
+                <div className="flex min-h-0 w-full flex-1 flex-col space-y-3 rounded-xl border border-border bg-background p-3">
+                  {messages.map((m, i) => (
+                    <div key={i} className={cn("flex w-full", m.role === "user" ? "justify-end" : "justify-start")}>
+                      <div
+                        className={cn(
+                          "max-w-[min(100%,42rem)] rounded-2xl border border-border/70 bg-muted/20 px-3 py-2 text-sm text-foreground shadow-sm",
+                        )}
+                      >
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{m.role}</div>
+                        <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">
+                          {m.content || (streaming && i === messages.length - 1 ? "…" : "")}
+                        </pre>
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={bottomRef} />
                 </div>
-              ))}
-              <div ref={bottomRef} />
-            </div>
+              </div>
+            ) : null}
 
-            {sendErr ? <div className="alert err playgroundSendErr">{sendErr}</div> : null}
+            <div
+              className={cn(
+                "flex min-h-0 shrink-0 flex-col px-4 pb-4 pt-2",
+                !hasMessages && "flex-1 justify-center",
+              )}
+            >
+              {!hasMessages ? (
+                <p className="mb-3 text-center text-sm text-muted-foreground">Write a message to start.</p>
+              ) : null}
+              {sendErr ? (
+                <div className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{sendErr}</div>
+              ) : null}
 
-            <div className="playgroundComposer">
-              <textarea
-                className="playgroundInput"
-                placeholder="Message…"
-                rows={3}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void send();
-                  }
-                }}
-              />
-              <div className="playgroundComposerActions">
-                {streaming ? (
-                  <button type="button" className="btn" onClick={stop}>
-                    Stop
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="btn btnPrimary"
-                  onClick={() => void send()}
-                  disabled={streaming || !modelId || !input.trim()}
-                >
-                  Send
-                </button>
+              <div
+                className={cn(
+                  "rounded-2xl border border-zinc-800 bg-black p-3 shadow-sm",
+                  hasMessages && "ring-[1px] ring-zinc-800/50",
+                )}
+              >
+                <textarea
+                  ref={messageTextareaRef}
+                  rows={1}
+                  className={cn(
+                    "pg-message-composer max-h-48 overflow-y-auto overflow-x-hidden",
+                    "w-full resize-none rounded-xl border border-transparent bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/80",
+                    "transition-[box-shadow,border-color,background-color] duration-200",
+                    "focus-visible:border-zinc-600/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50 focus-visible:ring-offset-0",
+                  )}
+                  placeholder="Message…"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onFocus={() => setMessageComposerFocused(true)}
+                  onBlur={() => setMessageComposerFocused(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void send();
+                    }
+                  }}
+                  style={{
+                    minHeight: "42px !important",
+                  }}
+                />
+                <div className="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-zinc-800/80 pt-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        data-testid="pg-model-trigger"
+                        aria-label="Model"
+                        className="max-w-[min(100%,14rem)] shrink-0 gap-2 border-border bg-muted/20 hover:bg-muted/30"
+                        disabled={modelsLoading || !modelOptions.length}
+                      >
+                        <ModelGlyph className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                        <span className="min-w-0 flex-1 truncate text-left font-mono text-xs">{modelLabel || "—"}</span>
+                        <ChevronDown className="size-4 shrink-0 opacity-60" aria-hidden />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[12rem]">
+                      {modelOptions.map((m) => {
+                        const Icon = modelProviderIcon(m);
+                        return (
+                          <DropdownMenuItem
+                            key={m.id}
+                            className="gap-2 font-mono text-xs"
+                            onSelect={() => updateActiveSession({ modelId: m.id })}
+                          >
+                            <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                            <span className="min-w-0 flex-1 truncate">{m.id}</span>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {streaming ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={stop}>
+                      Stop
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={streaming || !modelId || !input.trim()}
+                    className="gap-2 shadow-sm"
+                    onClick={() => void send()}
+                  >
+                    <Send className="size-4 shrink-0" aria-hidden />
+                    Send
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

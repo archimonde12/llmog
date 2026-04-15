@@ -9,6 +9,11 @@ export default defineConfig({
   plugins: [react()],
   base: "/ui/",
   root: __dirname,
+  resolve: {
+    alias: {
+      "@": path.join(__dirname, "src"),
+    },
+  },
   build: {
     outDir: path.join(__dirname, "dist"),
     emptyOutDir: true,

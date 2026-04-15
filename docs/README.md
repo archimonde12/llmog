@@ -12,12 +12,7 @@
 2. [`runbooks/standard/README.md`](./runbooks/standard/README.md)
 3. [`decisions/README.md`](./decisions/README.md)
 
-### Maintainer (release)
-1. [`runbooks/standard/publish-npm.md`](./runbooks/standard/publish-npm.md)
-2. [`runbooks/standard/README.md`](./runbooks/standard/README.md)
-
 ## Folder Map
-- `.plans/`: short working notes synced with active implementation (see [`.plans/README.md`](./.plans/README.md)); complements ADRs in `decisions/`.
 - `decisions/`: technical ADR/decision records.
 - `conventions/`: documentation conventions.
 - `runbooks/`: standard operations and incident handling.

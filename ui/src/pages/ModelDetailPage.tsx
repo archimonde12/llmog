@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { apiGet } from "../lib/api";
 import { Drawer } from "../components/Drawer";
 import { fmtTs } from "../lib/time";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type Msg = {
   id: string;
@@ -74,42 +77,54 @@ export function ModelDetailPage(props: { modelId: string; onBack: () => void }) 
   }, [items]);
 
   return (
-    <div className="page">
-      <div className="topbar">
-        <button type="button" className="btn" onClick={props.onBack}>
+    <div className="flex min-h-0 flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
+        <Button type="button" variant="outline" size="sm" onClick={props.onBack}>
           Back
-        </button>
-        <div className="topbarTitle">Model: {props.modelId}</div>
-        <div className="spacer" />
-        <div className="muted">Messages (input last 10)</div>
+        </Button>
+        <h1 className="text-lg font-semibold tracking-tight">Model: {props.modelId}</h1>
+        <span className="text-xs text-muted-foreground">Messages (input last 10)</span>
       </div>
 
-      {err && <div className="alert err">{err}</div>}
-      {loading && <div className="muted">Loading…</div>}
+      {err ? (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{err}</div>
+      ) : null}
+      {loading ? <div className="text-sm text-muted-foreground">Loading…</div> : null}
 
-      <div className="panel">
-        <div className="panelHeader">
-          <div className="panelTitle">Messages</div>
-          <div className="panelHint">Roles: system + user. Click to inspect raw JSON.</div>
-        </div>
-
-        <div className="list">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Messages</CardTitle>
+          <p className="text-xs text-muted-foreground">Roles: system + user. Click to inspect raw JSON.</p>
+        </CardHeader>
+        <CardContent className="flex max-h-[70vh] flex-col gap-2 overflow-y-auto">
           {prepared.map(({ m, preview, truncated }) => (
-            <button key={m.id} type="button" className="listItem" onClick={() => setSelected(m)}>
-              <div className="listItemTop">
-                <div className={`pill ${m.role}`}>{m.role}</div>
-                <div className="mono muted">{fmtTs(m.ts)}</div>
-                <div className="mono muted">req {m.requestId.slice(0, 8)}…</div>
+            <button
+              key={m.id}
+              type="button"
+              className="rounded-lg border border-border/60 bg-muted/10 p-3 text-left transition-colors hover:bg-muted/25"
+              onClick={() => setSelected(m)}
+            >
+              <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 font-semibold uppercase",
+                    m.role === "system" ? "bg-amber-500/15 text-amber-200" : "bg-sky-500/15 text-sky-100",
+                  )}
+                >
+                  {m.role}
+                </span>
+                <span className="font-mono">{fmtTs(m.ts)}</span>
+                <span className="font-mono">req {m.requestId.slice(0, 8)}…</span>
               </div>
-              <pre className="msgPreview">
+              <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-xs leading-relaxed">
                 {preview}
                 {truncated ? "\n…" : ""}
               </pre>
             </button>
           ))}
-          {prepared.length === 0 && <div className="muted">No messages captured yet for this model</div>}
-        </div>
-      </div>
+          {prepared.length === 0 ? <p className="text-sm text-muted-foreground">No messages captured yet for this model</p> : null}
+        </CardContent>
+      </Card>
 
       <Drawer
         open={Boolean(selected)}
@@ -117,31 +132,25 @@ export function ModelDetailPage(props: { modelId: string; onBack: () => void }) 
         onClose={() => setSelected(null)}
       >
         {!selected ? null : (
-          <div className="stack">
-            <div className="panelSub">
-              <div className="panelHeader">
-                <div className="panelTitle">Render text</div>
-                <div className="spacer" />
-                <button type="button" className="btn mini" onClick={() => copy(toText(selected.rawMessageJson))}>
+          <div className="flex flex-col gap-4">
+            <div className="rounded-lg border border-border/80 bg-muted/10 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Render text</h3>
+                <Button type="button" size="sm" variant="secondary" onClick={() => copy(toText(selected.rawMessageJson))}>
                   Copy
-                </button>
+                </Button>
               </div>
-              <pre className="pre">{toText(selected.rawMessageJson) || "—"}</pre>
+              <pre className="whitespace-pre-wrap break-words font-sans text-xs">{toText(selected.rawMessageJson) || "—"}</pre>
             </div>
 
-            <div className="panelSub">
-              <div className="panelHeader">
-                <div className="panelTitle">Raw JSON</div>
-                <div className="spacer" />
-                <button
-                  type="button"
-                  className="btn mini"
-                  onClick={() => copy(JSON.stringify(selected.rawMessageJson, null, 2))}
-                >
+            <div className="rounded-lg border border-border/80 bg-muted/10 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Raw JSON</h3>
+                <Button type="button" size="sm" variant="secondary" onClick={() => copy(JSON.stringify(selected.rawMessageJson, null, 2))}>
                   Copy
-                </button>
+                </Button>
               </div>
-              <pre className="pre mono">{JSON.stringify(selected.rawMessageJson, null, 2)}</pre>
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs">{JSON.stringify(selected.rawMessageJson, null, 2)}</pre>
             </div>
           </div>
         )}

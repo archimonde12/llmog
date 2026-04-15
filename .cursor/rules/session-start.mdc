@@ -1,24 +1,154 @@
 ---
-description: Project context and working habits - read at session start
+description: Project context and workflow habits — read at session start
 alwaysApply: true
 ---
 
-# Session Start
+# Session start (llmog)
 
-## Goals
-- Keep a consistent working flow: **issue -> brainstorm -> decision -> plan -> implementation**.
-- Prefer small diffs, clear ownership, and risk-appropriate verification.
+## Objectives
+- Keep a consistent workflow: **issue -> brainstorm -> decision -> plan -> execution**.
+- Prefer small diffs, clear ownership, and verification proportional to risk.
 
-## Standard Flow (5 Steps)
-1. Issue / request
-2. Brainstorm
-3. Decision (ADR)
-4. Plan
-5. Implementation
+## Repo quick context
+
+- Node/TS: OpenAI-compatible LLM gateway (`llmog`); `npm test` (vitest), `npm run build` (UI via Vite + `tsc`).
+- See root `README.md` for usage.
+
+## Standard Flow (5 steps)
+
+1. **Issue / request** — understand context, constraints, and acceptance criteria (from ticket if available).
+2. **Brainstorm** — propose a few implementation directions and short trade-offs; no detailed coding yet.
+3. **Decision (ADR)** — before detailed planning, record approved decisions in `docs/decisions/` (file `NNN_decision_name.md`, follow `docs/decisions/README.md`).
+4. **Plan** — concrete steps, impacted files/modules, risks, and verification approach (based on stored ADR).
+5. **Execution** — start code changes only after the user confirms the plan or explicitly says "implement now".
+
+- If the user is only presenting an issue or brainstorming: **do not** jump into a large patch; ask concise clarifying questions when needed.
+- When the user explicitly requests only one step (for example "review the plan only"), follow that step — **do not** force ADR/plan unless minimum required information is missing.
 
 ## Mandatory Gates
-- Gate 1: Before detailed planning, ADR is required for significant changes.
-- Gate 2: Before implementation, a confirmed plan or an explicit implementation command is required.
 
-## AskQuestion Gate
-- For non-trivial tasks: ask 1-2 critical clarification questions before deep analysis or implementation.
+### Gate 1 — before detailed planning
+- ADR is required for significant architecture/business behavior decisions, unless the user explicitly says to skip it for that case.
+- ADR is usually required when one of the following applies:
+  - API contract changes (request/response shape, error codes, auth scheme);
+  - adding/removing external dependencies (libraries, services, infrastructure);
+  - impact across more than one service in the monorepo;
+  - business behavior changes with potential breaking impact to clients/consumers.
+
+### Gate 2 — before execution
+- Requires a confirmed plan or a clear execution command.
+- If the plan is ambiguous: ask 1-2 critical questions, do not guess and make broad edits.
+
+## Exceptions
+
+- Small fixes: typo, one-liner, log/format adjustment, simple change without API/architecture impact — brainstorm/ADR/plan can be skipped; keep diff small.
+
+## When User Skips Steps
+
+- Remind **once**, briefly: recommended order and missing part (for example asking for plan before ADR).
+- If user **insists** on continuing (skip ADR, or plan before ADR): comply and clearly state risk/ownership in response (no repeated argument).
+
+## Execution: Working Principles
+
+- Read surrounding code before refactoring; keep diffs small and in scope.
+- If actual code differs from stored ADR:
+  - Explain the difference to the user before continuing.
+  - Do not silently update or ignore ADR mismatch; wait for user decision.
+- Run test/lint/build with this priority:
+  - **Required** when changing business logic, interfaces/types, or adding/removing dependencies.
+  - **Recommended** for config, env, docs, log/format updates.
+  - If required checks cannot run, explain why and suggest commands for manual execution.
+- Use absolute paths in commands/tools when repository setup allows it.
+- If user requests commit, follow repository convention:
+  - Use [Conventional Commits](https://www.conventionalcommits.org/) format `type(scope): short description` (example `feat(my-service): add retry logic for payment`) when repo history follows it.
+  - Keep each PR focused on one issue/task; avoid bundling unrelated changes.
+
+## Language
+
+- Reply in the user's language (for example Vietnamese if they write Vietnamese), unless they request otherwise.
+
+## Documentation & Recording Scope
+
+- `docs/decisions/`: part of the standard flow (after brainstorm, before plan); draft/update when user is in that step or asks to save decisions. **Not** conflicting with rule below: this is an intentional ADR exception.
+- Other docs (`README`, changelog, `docs/` outside decisions): only when user explicitly requests.
+
+## Changelog Policy (mandatory)
+
+- For any **code change** (logic/type/interface/test/index/runtime config), update the corresponding changelog before finishing the task.
+- For any **code change** (logic/type/interface/test/index/runtime config), update the corresponding changelog before closing the task.
+- Not limited to one package: **every service or deployable unit must have its own changelog** and must be updated when that part of the repo changes.
+- Also update root aggregate changelog: `changelog/UNRELEASED.md` (summary by service).
+- For service `X`, prefer detailed entry in `X/changelog/UNRELEASED.md`.
+- Changelog updates can be skipped only when user explicitly says so for the current task (example: "no changelog needed").
+- Final checklist before completion:
+  - If code files changed in a service => that service has an entry in `*/changelog/UNRELEASED.md`.
+  - `changelog/UNRELEASED.md` includes corresponding summary entries.
+
+## Rule Priority on Conflicts
+
+- **Workspace** rule (this file) controls process and documentation scope for this workspace (`llmog`).
+- **User/global** rule (for example "do not add markdown automatically"): **ADR in `docs/decisions/`** remains part of agreed process; other markdown still requires explicit request.
+- If user asks for "code only" while describing a new feature: remind gate (ADR/plan) once; if they still insist, execute latest instruction and briefly record assumptions.
+
+## AskQuestion Gate (strict)
+
+- `trivial`: short informational Q&A only; no technical decision, no plan, no write-intent.
+- If uncertain whether trivial => treat as non-trivial.
+- For non-trivial tasks, AskQuestion must be called before deep analysis/planning/execution.
+- AskQuestion gate cannot be bypassed.
+
+## Slash Protocol: /ask
+
+When user sends `/ask`:
+- Ask for only missing information required to execute the current request correctly.
+- Ask only necessary questions, prioritizing higher-risk gaps first.
+- Do not ask user to repeat the same prompt.
+- If information is sufficient: explicitly state "enough information, no more questions needed" and continue.
+
+## Decision Logging Split Policy
+
+- After every decision: always create a Decision Record in `.journal/decision-log/`.
+- Create/update Decision in `docs/decisions` only when user explicitly requests official save (promote).
+- Default when user is silent: do not promote to `docs/decisions`.
+
+## Plan Output Contract (hard-fail)
+
+### Scope trigger
+
+Apply this section only when:
+- user asks to create/update/review a plan, or
+- current mode is Plan mode.
+
+Do not apply this section for normal implementation/chat outside planning context.
+
+### Plan naming convention
+
+- Plan name must start with `{project}`.
+- `{project}` is the current workspace folder name.
+- Required format: `{project}-{yyyymmdd}-{topic-kebab}`.
+- Example for this workspace: `llmog-20260415-example-topic-kebab`.
+
+### Required plan outputs (all required)
+
+When producing a plan, always include:
+1. Concrete file-level outputs (not only file paths).
+2. Copy/paste-ready templates for each created/updated file when requested.
+3. Acceptance criteria checklist for execution handoff.
+4. A clear split of defaults vs items requiring explicit user confirmation.
+5. Verification/test steps that are specific and executable.
+6. Concise but implementation-ready details so a different agent can execute.
+
+### Clarification protocol (hard-fail)
+
+- Ask 1-2 critical questions only when missing details block a reliable plan.
+- Use AskQuestion for clarification.
+- If user says they are done confirming, stop asking non-critical questions.
+- If any required output above is missing, do not present the result as a completed plan.
+
+## Definition of Done (task completion)
+
+- Provide verification evidence appropriate to risk level (test/lint/build, or reason why not runnable).
+- Do not expand scope beyond confirmed request.
+- If there is code change: update related service changelog + root `changelog/UNRELEASED.md`.
+- State residual risks/assumptions clearly (if any).
+- Provide short next steps (if user needs manual run/deploy).

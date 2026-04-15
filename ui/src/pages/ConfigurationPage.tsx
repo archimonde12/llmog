@@ -1,5 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Drawer } from "../components/Drawer";
+import { Loader2, Pencil, CircleCheck, CircleX } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { apiGet, apiPost, apiPut } from "../lib/api";
 import { setHash } from "../lib/hashRoute";
 
@@ -225,7 +229,8 @@ export function ConfigurationPage() {
   const [selectedKey, setSelectedKey] = useState<string>("");
 
   const [env, setEnv] = useState<EnvResponse | null>(null);
-  const [envOpen, setEnvOpen] = useState(false);
+  const [envSheetOpen, setEnvSheetOpen] = useState(false);
+  const [modelSheetOpen, setModelSheetOpen] = useState(false);
   const [envKey, setEnvKey] = useState("");
   const [envVal, setEnvVal] = useState("");
   const [envEditRows, setEnvEditRows] = useState<Array<{ key: string; value: string }>>([]);
@@ -379,6 +384,7 @@ export function ConfigurationPage() {
       return [draft, ...prev];
     });
     setSelectedKey(tmpKey);
+    setModelSheetOpen(true);
   }, []);
 
   const runDiscover = useCallback(async () => {
@@ -435,6 +441,7 @@ export function ConfigurationPage() {
     const sk = selected._uiKey ?? selected.id;
     setModels((prev) => prev.filter((m) => (m._uiKey ?? m.id) !== sk));
     setSelectedKey("");
+    setModelSheetOpen(false);
     setStatusById((p) => {
       const n = { ...p };
       delete n[sk];
@@ -654,7 +661,7 @@ export function ConfigurationPage() {
       const fresh = await apiGet<EnvResponse>("/admin/env");
       setEnv(fresh);
       setEnvEditRows((fresh.dotenvEntries ?? []).map((e) => ({ key: e.key, value: e.value })));
-      setEnvOpen(true);
+      setEnvSheetOpen(true);
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
@@ -809,442 +816,522 @@ export function ConfigurationPage() {
     !playgroundStatus?.loading &&
     rowTesting !== selectedRowKey;
 
+  const selectFieldClass =
+    "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
   return (
-    <div className="page">
-      <div className="topbar">
-        <div>
-          <div className="topbarTitle">Configuration</div>
-          {meta && (
-            <div className="muted" style={{ fontSize: "0.82rem" }}>
-              Config: <span className="mono">{meta.writeTarget}</span>
-            </div>
-          )}
+    <div className="flex min-h-0 flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-lg font-semibold tracking-tight text-foreground">Configuration</h1>
+          {meta ? (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Config: <span className="font-mono text-foreground/90">{meta.writeTarget}</span>
+            </p>
+          ) : null}
         </div>
-        <div className="spacer" />
-        <button type="button" className="btn" onClick={() => void openEnvDrawer()} disabled={loading}>
+        <Button type="button" variant="outline" size="sm" onClick={() => void openEnvDrawer()} disabled={loading}>
           Manage env
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="btn"
+          variant="outline"
+          size="sm"
           onClick={() => void onTestAllClick()}
           disabled={testAllRunning || testAllCooldown || loading}
           title="Test all models sequentially"
         >
-          {testAllRunning ? "Testing all…" : "Test all"}
-        </button>
-        <button
+          {testAllRunning ? (
+            <>
+              <Loader2 className="animate-spin" aria-hidden />
+              Testing all…
+            </>
+          ) : (
+            "Test all"
+          )}
+        </Button>
+        <Button
           type="button"
-          className="btn"
+          variant="outline"
+          size="sm"
           onClick={() => void reloadFromDisk()}
           disabled={saving || reloadCooldown}
           title="Reload models.json from disk. Environment variables are re-read so ${ENV} references in config resolve again."
         >
           {reloadCooldown ? "Reload env…" : "Reload env"}
-        </button>
-        <button type="button" className="btn btnPrimary" onClick={() => void save()} disabled={saving || !dirty}>
+        </Button>
+        <Button
+          type="button"
+          variant={canOpenPlayground ? "default" : "secondary"}
+          size="sm"
+          disabled={!canOpenPlayground}
+          title={
+            canOpenPlayground
+              ? "Open Playground with this model selected"
+              : "Save config and wait for connection test OK to enable"
+          }
+          onClick={() => {
+            if (!selected?.id.trim()) return;
+            setHash(`playground?model=${encodeURIComponent(selected.id.trim())}`);
+          }}
+        >
+          Playground
+        </Button>
+        <Button type="button" size="sm" onClick={() => void save()} disabled={saving || !dirty}>
           {saving ? "Saving…" : "Save"}
-        </button>
+        </Button>
       </div>
 
-      {err && <div className="alert err">{err}</div>}
-      {hint && <div className="alert">{hint}</div>}
-      {dirty && (
-        <div className="alert okHint">Changes pending — click <strong>Save</strong> to write models.json.</div>
-      )}
-      {loading && <div className="muted">Loading…</div>}
+      {err ? (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{err}</div>
+      ) : null}
+      {hint ? <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">{hint}</div> : null}
+      {dirty ? (
+        <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+          Changes pending — click <strong>Save</strong> to write models.json.
+        </div>
+      ) : null}
+      {loading ? <div className="text-sm text-muted-foreground">Loading…</div> : null}
 
-      <div className="split">
-        <div className="panel">
-          <div className="panelHeader">
-            <div className="panelTitle">Models</div>
-            <div className="spacer" />
-            <button type="button" className="btn mini" onClick={addModel}>
-              + Add model
-            </button>
-          </div>
-
-          <div className="tableWrap">
-            <table className="table tableCompact">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Adapter</th>
-                  <th>Base URL</th>
-                  <th>Model</th>
-                  <th>Status</th>
-                  <th className="tableCellErr" title="Last test error (short)">
-                    Err
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {models.map((m) => {
-                  const rowKey = m._uiKey ?? m.id;
-                  const st = statusById[rowKey];
-                  const loadingRow = Boolean(st?.loading);
-                  return (
-                    <tr
-                      key={rowKey}
-                      className={`clickable ${rowKey === selectedKey ? "selectedRow" : ""}`}
-                      onClick={() => setSelectedKey(rowKey)}
-                    >
-                      <td className="mono tableCellClip" title={m.id || ""}>
-                        {m.id || "—"}
-                      </td>
-                      <td className="tableCellClip" title={m.adapter}>
-                        {m.adapter}
-                      </td>
-                      <td className="mono tableCellClip" title={m.baseUrl}>
-                        {m.baseUrl}
-                      </td>
-                      <td className="mono tableCellClip" title={m.model}>
-                        {m.model}
-                      </td>
-                      <td className={st && !st.loading && st.ok === true ? "good" : st && !st.loading && st.ok === false ? "bad" : "muted"}>
-                        {loadingRow ? "…" : st && st.ok === true ? "OK" : st && st.ok === false ? "Err" : "—"}
-                      </td>
-                      <td className="muted tableCellClip tableCellErr" title={st?.message}>
-                        {loadingRow ? "…" : st?.shortErr ?? "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {models.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="muted">
-                      No models
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+      <div className="rounded-xl border border-border bg-card shadow">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-foreground">Models</h2>
+          <div className="flex-1" />
+          <Button
+            type="button"
+            size="sm"
+            className="bg-gradient-to-r from-violet-600 to-sky-500 font-medium text-white shadow hover:from-violet-500 hover:to-sky-400 hover:shadow-[0_0_20px_rgba(56,189,248,0.35)]"
+            onClick={addModel}
+          >
+            + Add model
+          </Button>
         </div>
 
-        <div className="panel">
-          <div className="panelHeader">
-            <div className="panelTitle">Edit model</div>
-            <div className="panelHint">{selected ? selected.id || "(draft)" : "Select a model"}</div>
-            <div className="spacer" />
-            <button
-              type="button"
-              className={`btn mini${canOpenPlayground ? " btnPrimary" : ""}`}
-              disabled={!canOpenPlayground}
-              title={
-                canOpenPlayground
-                  ? "Open Playground with this model selected"
-                  : "Save config and wait for connection test OK to enable"
-              }
-              onClick={() => {
-                if (!selected?.id.trim()) return;
-                setHash(`playground?model=${encodeURIComponent(selected.id.trim())}`);
-              }}
-            >
-              Playground
-            </button>
-            <button type="button" className="btn btnDanger mini" onClick={deleteSelected} disabled={!selected}>
-              Delete
-            </button>
-          </div>
-
-          {!selected ? (
-            <div className="muted">Select a model to edit</div>
-          ) : (
-            <div className="formGrid formStack">
-              <label className="field">
-                <span className="fieldLabel">ID</span>
-                <input
-                  value={selected.id}
-                  onChange={(e) => updateSelected({ id: e.target.value })}
-                  placeholder="e.g. ollama-local"
-                />
-              </label>
-
-              <label className="field">
-                <span className="fieldLabel">Adapter</span>
-                <select value={selected.adapter} onChange={(e) => updateSelected({ adapter: e.target.value as Adapter })}>
-                  <option value="ollama">ollama</option>
-                  <option value="openai_compatible">openai_compatible</option>
-                  <option value="deepseek">deepseek</option>
-                </select>
-              </label>
-
-              <label className="field">
-                <span className="fieldLabel">Base URL</span>
-                <div className="row" style={{ marginBottom: 0, alignItems: "stretch", gap: "0.5rem", width: "100%" }}>
-                  <input
-                    style={{ flex: 1, minWidth: "8rem" }}
-                    value={selected.baseUrl}
-                    onChange={(e) => updateSelected({ baseUrl: e.target.value })}
-                    onBlur={() => scheduleDiscoverFromBlur()}
-                    placeholder="http://localhost:11434"
-                  />
-                  <button
-                    type="button"
-                    className="btn mini"
-                    disabled={discoverLoading}
-                    onClick={() => void runDiscover()}
+        <div className="overflow-x-auto px-2 pb-3">
+          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="px-2 py-2 font-medium">ID</th>
+                <th className="px-2 py-2 font-medium">Adapter</th>
+                <th className="px-2 py-2 font-medium">Base URL</th>
+                <th className="px-2 py-2 font-medium">Model</th>
+                <th className="px-2 py-2 font-medium">Status</th>
+                <th className="px-2 py-2 font-medium" title="Last test error (short)">
+                  Err
+                </th>
+                <th className="px-2 py-2 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {models.map((m) => {
+                const rowKey = m._uiKey ?? m.id;
+                const st = statusById[rowKey];
+                const loadingRow = Boolean(st?.loading);
+                const ok = st && !st.loading && st.ok === true;
+                const bad = st && !st.loading && st.ok === false;
+                return (
+                  <tr
+                    key={rowKey}
+                    className={`cursor-pointer border-b border-border/60 transition-colors hover:bg-white/[0.03] ${
+                      rowKey === selectedKey ? "bg-primary/10" : ""
+                    }`}
+                    onClick={() => setSelectedKey(rowKey)}
                   >
-                    {discoverLoading ? "Fetching…" : "Fetch models"}
-                  </button>
-                </div>
-                {discoverErr ? (
-                  <div className="alert err" style={{ marginTop: "0.4rem", fontSize: "0.82rem" }}>
-                    {discoverErr}
-                  </div>
-                ) : null}
-              </label>
-
-              {(selected.adapter === "openai_compatible" || selected.adapter === "deepseek") && (
-                <label className="field">
-                  <span className="fieldLabel">Discovery API key (optional, not saved)</span>
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={discoverApiKey}
-                    onChange={(e) => setDiscoverApiKey(e.target.value)}
-                    placeholder="Bearer token for listing /v1/models only"
-                  />
-                </label>
-              )}
-
-              <label className="field">
-                <span className="fieldLabel">Model</span>
-                {discoveredModels.length > 0 ? (
-                  <select
-                    value={discoveredModels.includes(selected.model) ? selected.model : "__custom__"}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v === "__custom__") return;
-                      updateSelected({ model: v });
-                    }}
-                  >
-                    {discoveredModels.map((id) => (
-                      <option key={id} value={id}>
-                        {id}
-                      </option>
-                    ))}
-                    <option value="__custom__">Custom…</option>
-                  </select>
-                ) : null}
-                <input
-                  style={{ marginTop: discoveredModels.length > 0 ? "0.4rem" : 0 }}
-                  value={selected.model}
-                  onChange={(e) => updateSelected({ model: e.target.value })}
-                  placeholder="llama3 / gpt-4o-mini / …"
-                />
-              </label>
-
-              <div className="field">
-                <span className="fieldLabel">API key</span>
-                <div className="apiKeyModeRow">
-                  <button
-                    type="button"
-                    className={`btn mini${apiKeyMode === "none" ? " modeOn" : ""}`}
-                    onClick={() => {
-                      setApiKeyMode("none");
-                      setApiKeyNone();
-                    }}
-                  >
-                    None
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn mini${apiKeyMode === "env" ? " modeOn" : ""}`}
-                    onClick={() => {
-                      setApiKeyMode("env");
-                      if (!selected.apiKey || !isEnvRef(selected.apiKey)) {
-                        setApiKeyEnv(envKeysFromFile[0] ?? "");
-                      }
-                    }}
-                  >
-                    From env
-                  </button>
-                </div>
-
-                {apiKeyMode === "env" && (
-                  <>
-                    <label className="field" style={{ marginTop: "0.5rem", marginBottom: 0 }}>
-                      <span className="fieldLabel">Variable (from .env file)</span>
-                      <select
-                        value={selected.apiKey && isEnvRef(selected.apiKey) ? envNameFromRef(selected.apiKey) : ""}
-                        onChange={(e) => setApiKeyEnv(e.target.value)}
-                      >
-                        <option value="">(select)</option>
-                        {orphanEnvRefName && (
-                          <option value={orphanEnvRefName}>
-                            {orphanEnvRefName} (not in .env — add under Manage env)
-                          </option>
+                    <td className="max-w-[10rem] truncate px-2 py-2 font-mono text-xs" title={m.id || ""}>
+                      {m.id || "—"}
+                    </td>
+                    <td className="max-w-[8rem] truncate px-2 py-2 text-xs" title={m.adapter}>
+                      {m.adapter}
+                    </td>
+                    <td className="max-w-[12rem] truncate px-2 py-2 font-mono text-xs" title={m.baseUrl}>
+                      {m.baseUrl}
+                    </td>
+                    <td className="max-w-[10rem] truncate px-2 py-2 font-mono text-xs" title={m.model}>
+                      {m.model}
+                    </td>
+                    <td className="px-2 py-2">
+                      <span className="inline-flex items-center gap-1.5 text-xs">
+                        {loadingRow ? (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-label="Testing" />
+                            <span className="text-muted-foreground">…</span>
+                          </>
+                        ) : ok ? (
+                          <>
+                            <CircleCheck className="size-3.5 text-emerald-400" aria-hidden />
+                            <span className="text-emerald-400">OK</span>
+                          </>
+                        ) : bad ? (
+                          <>
+                            <CircleX className="size-3.5 text-red-400" aria-hidden />
+                            <span className="text-red-400">Err</span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
-                        {envKeysFromFile.map((k) => (
-                          <option key={k} value={k}>
-                            {k}
+                      </span>
+                    </td>
+                    <td className="max-w-[8rem] truncate px-2 py-2 text-xs text-muted-foreground" title={st?.message}>
+                      {loadingRow ? "…" : st?.shortErr ?? "—"}
+                    </td>
+                    <td className="px-2 py-2 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Edit model"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedKey(rowKey);
+                          setModelSheetOpen(true);
+                        }}
+                      >
+                        <Pencil className="size-4" />
+                        <span className="sr-only">Edit</span>
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {models.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-2 py-6 text-center text-sm text-muted-foreground">
+                    No models
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <Sheet open={modelSheetOpen} onOpenChange={setModelSheetOpen}>
+        <SheetContent className="sm:max-w-xl" showClose>
+          <SheetHeader>
+            <SheetTitle>Edit model</SheetTitle>
+            <SheetDescription>{selected ? selected.id || "(draft)" : "Select a model from the table"}</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 flex flex-wrap gap-2 border-b border-border pb-4">
+            <Button type="button" variant="destructive" size="sm" onClick={deleteSelected} disabled={!selected}>
+              Delete
+            </Button>
+          </div>
+          {!selected ? (
+            <p className="mt-4 text-sm text-muted-foreground">Select a model in the table, then use Edit.</p>
+          ) : (
+            <div className="mt-2 flex flex-col gap-6">
+              <div>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Basic info</p>
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cfg-model-id">ID</Label>
+                    <Input
+                      id="cfg-model-id"
+                      value={selected.id}
+                      onChange={(e) => updateSelected({ id: e.target.value })}
+                      placeholder="e.g. ollama-local"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cfg-adapter">Adapter</Label>
+                    <select
+                      id="cfg-adapter"
+                      className={selectFieldClass}
+                      value={selected.adapter}
+                      onChange={(e) => updateSelected({ adapter: e.target.value as Adapter })}
+                    >
+                      <option value="ollama">ollama</option>
+                      <option value="openai_compatible">openai_compatible</option>
+                      <option value="deepseek">deepseek</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cfg-base-url">Base URL</Label>
+                    <div className="flex flex-wrap items-stretch gap-2">
+                      <Input
+                        id="cfg-base-url"
+                        className="min-w-[8rem] flex-1"
+                        value={selected.baseUrl}
+                        onChange={(e) => updateSelected({ baseUrl: e.target.value })}
+                        onBlur={() => scheduleDiscoverFromBlur()}
+                        placeholder="http://localhost:11434"
+                      />
+                      <Button type="button" variant="secondary" size="sm" disabled={discoverLoading} onClick={() => void runDiscover()}>
+                        {discoverLoading ? (
+                          <>
+                            <Loader2 className="animate-spin" aria-hidden />
+                            Fetching…
+                          </>
+                        ) : (
+                          "Fetch models"
+                        )}
+                      </Button>
+                    </div>
+                    {discoverErr ? (
+                      <div className="mt-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                        {discoverErr}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {(selected.adapter === "openai_compatible" || selected.adapter === "deepseek") && (
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="cfg-discover-key">Discovery API key (optional, not saved)</Label>
+                      <Input
+                        id="cfg-discover-key"
+                        type="password"
+                        autoComplete="off"
+                        value={discoverApiKey}
+                        onChange={(e) => setDiscoverApiKey(e.target.value)}
+                        placeholder="Bearer token for listing /v1/models only"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cfg-model-name">Model</Label>
+                    {discoveredModels.length > 0 ? (
+                      <select
+                        id="cfg-model-pick"
+                        className={selectFieldClass}
+                        value={discoveredModels.includes(selected.model) ? selected.model : "__custom__"}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === "__custom__") return;
+                          updateSelected({ model: v });
+                        }}
+                      >
+                        {discoveredModels.map((id) => (
+                          <option key={id} value={id}>
+                            {id}
                           </option>
                         ))}
+                        <option value="__custom__">Custom…</option>
                       </select>
-                    </label>
-                    {showCreateEnvKeyButton && (
-                      <div style={{ marginTop: "0.35rem" }}>
-                        <button type="button" className="btn mini ghost" onClick={() => void openEnvDrawerWithSuggestedApiKey()}>
-                          Create env key · <span className="mono">{suggestApiKeyEnvName(selected.id, selected.adapter)}</span>
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
+                    ) : null}
+                    <Input
+                      id="cfg-model-name"
+                      className={discoveredModels.length > 0 ? "mt-1" : ""}
+                      value={selected.model}
+                      onChange={(e) => updateSelected({ model: e.target.value })}
+                      placeholder="llama3 / gpt-4o-mini / …"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <details className="panel" style={{ marginTop: "0.6rem" }}>
-                <summary style={{ cursor: "pointer", fontWeight: 650 }}>Edit Raw JSON</summary>
-                <textarea className="raw" readOnly value={rawJsonText} style={{ marginTop: "0.75rem" }} />
+              <div>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Auth / API keys</p>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={apiKeyMode === "none" ? "default" : "outline"}
+                      onClick={() => {
+                        setApiKeyMode("none");
+                        setApiKeyNone();
+                      }}
+                    >
+                      None
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={apiKeyMode === "env" ? "default" : "outline"}
+                      onClick={() => {
+                        setApiKeyMode("env");
+                        if (!selected.apiKey || !isEnvRef(selected.apiKey)) {
+                          setApiKeyEnv(envKeysFromFile[0] ?? "");
+                        }
+                      }}
+                    >
+                      From env
+                    </Button>
+                  </div>
+
+                  {apiKeyMode === "env" && (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="cfg-env-var">Variable (from .env file)</Label>
+                        <select
+                          id="cfg-env-var"
+                          className={selectFieldClass}
+                          value={selected.apiKey && isEnvRef(selected.apiKey) ? envNameFromRef(selected.apiKey) : ""}
+                          onChange={(e) => setApiKeyEnv(e.target.value)}
+                        >
+                          <option value="">(select)</option>
+                          {orphanEnvRefName && (
+                            <option value={orphanEnvRefName}>
+                              {orphanEnvRefName} (not in .env — add under Manage env)
+                            </option>
+                          )}
+                          {envKeysFromFile.map((k) => (
+                            <option key={k} value={k}>
+                              {k}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {showCreateEnvKeyButton && (
+                        <Button type="button" variant="ghost" size="sm" className="h-auto justify-start px-0" onClick={() => void openEnvDrawerWithSuggestedApiKey()}>
+                          Create env key ·{" "}
+                          <span className="font-mono text-xs">{suggestApiKeyEnvName(selected.id, selected.adapter)}</span>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <details className="rounded-lg border border-border bg-muted/10 px-3 py-2">
+                <summary className="cursor-pointer text-sm font-semibold text-foreground">Edit Raw JSON</summary>
+                <textarea
+                  readOnly
+                  value={rawJsonText}
+                  className="mt-3 min-h-[180px] w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
               </details>
             </div>
           )}
-        </div>
-      </div>
+        </SheetContent>
+      </Sheet>
 
-      <details className="panel" style={{ marginTop: "0.5rem" }}>
-        <summary style={{ cursor: "pointer", fontWeight: 650 }}>Edit full models.json</summary>
-        <div className="stack" style={{ marginTop: "0.75rem" }}>
-          <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap", marginBottom: 0 }}>
-            <button type="button" className="btn mini" onClick={() => setFullConfigText(serializeModelsFileJson())}>
+      <details className="mt-2 rounded-xl border border-border bg-card">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Edit full models.json</summary>
+        <div className="flex flex-col gap-3 border-t border-border px-4 py-3">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setFullConfigText(serializeModelsFileJson())}>
               Load from table
-            </button>
-            <button type="button" className="btn mini" onClick={() => void applyFullConfigText()}>
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => void applyFullConfigText()}>
               Apply to table
-            </button>
+            </Button>
           </div>
           <textarea
-            className="raw"
             value={fullConfigText}
             onChange={(e) => setFullConfigText(e.target.value)}
             spellCheck={false}
+            className="min-h-[220px] w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
       </details>
 
-      <Drawer open={envOpen} title="Manage env" showCloseButton={false} onClose={() => setEnvOpen(false)}>
-        {!env ? (
-          <div className="muted">Env API unavailable</div>
-        ) : (
-          <div className="stack">
-            <div className="row" style={{ alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: 0 }}>
-              <div className="muted" style={{ fontSize: "0.82rem" }}>
-                {env.dotenvSource} · path in clipboard via button
-              </div>
-              <button type="button" className="btn mini" onClick={() => void copyDotenvPath()} title={dotenvPathDisplay}>
-                Copy path
-              </button>
-            </div>
-
-            <div className="panelSub">
-              <div className="panelHeader">
-                <div className="panelTitle">Add / update key</div>
-              </div>
-              <div className="stack" style={{ maxWidth: "44rem" }}>
-                <label className="field">
-                  <span className="fieldLabel">Key</span>
-                  <input
-                    className="mono"
-                    style={{ width: "100%" }}
-                    value={envKey}
-                    onChange={(e) => setEnvKey(e.target.value)}
-                    placeholder="OPENAI_API_KEY"
-                  />
-                </label>
-                <label className="field">
-                  <span className="fieldLabel">Value</span>
-                  <textarea
-                    rows={3}
-                    style={{ width: "100%" }}
-                    value={envVal}
-                    onChange={(e) => setEnvVal(e.target.value)}
-                    placeholder="paste token"
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                </label>
-                <button type="button" className="btn" onClick={() => void saveEnv()} disabled={envBusy}>
-                  {envBusy ? "Saving…" : "Save env"}
-                </button>
-                <div className="muted" style={{ fontSize: "0.82rem" }}>
-                  After saving, the server updates runtime env and reloads config automatically.
+      <Sheet open={envSheetOpen} onOpenChange={setEnvSheetOpen}>
+        <SheetContent className="sm:max-w-lg" showClose>
+          <SheetHeader>
+            <SheetTitle>Manage env</SheetTitle>
+            <SheetDescription>View and edit variables stored in the server .env file.</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 flex flex-col gap-6">
+            {!env ? (
+              <p className="text-sm text-muted-foreground">Env API unavailable</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-muted-foreground">{env.dotenvSource} · path in clipboard via button</p>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => void copyDotenvPath()} title={dotenvPathDisplay}>
+                    Copy path
+                  </Button>
                 </div>
-              </div>
-            </div>
 
-            <div className="panelSub">
-              <div className="panelHeader">
-                <div className="panelTitle">Variables in .env file</div>
-                <div className="panelHint">Click a key to view/edit. Save only appears when the value changed.</div>
-              </div>
-              <div className="stack" style={{ gap: "0.5rem" }}>
-                {envEditRows.map((row) => {
-                  const open = envRowOpenKey === row.key;
-                  const original = (env?.dotenvEntries ?? []).find((e) => e.key === row.key)?.value ?? "";
-                  const dirty = row.value !== original;
-                  return (
-                    <div key={row.key} className="panelSub" style={{ padding: "0.6rem", borderRadius: 10 }}>
-                      <button
-                        type="button"
-                        className="btn mini ghost"
-                        style={{ width: "100%", textAlign: "left" }}
-                        onClick={() => setEnvRowOpenKey((prev) => (prev === row.key ? null : row.key))}
-                      >
-                        <span className="mono">{row.key}</span>
-                        {dirty && <span className="muted"> · modified</span>}
-                      </button>
-                      {open && (
-                        <div className="stack" style={{ marginTop: "0.5rem" }}>
-                          <textarea
-                            className="mono"
-                            style={{ width: "100%", minHeight: "4.25rem", fontSize: "0.82rem" }}
-                            value={row.value}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setEnvEditRows((prev) => prev.map((r) => (r.key === row.key ? { ...r, value: v } : r)));
-                            }}
-                            spellCheck={false}
-                          />
-                          <div className="row" style={{ gap: "0.5rem", marginBottom: 0 }}>
-                            {dirty && (
-                              <button
-                                type="button"
-                                className="btn mini btnPrimary"
-                                disabled={envBusy}
-                                onClick={() => void saveOneEnvRow(row.key, row.value)}
-                              >
-                                Save
-                              </button>
-                            )}
-                            <button type="button" className="btn mini" onClick={() => duplicateEnvRow(row.key)} disabled={envBusy}>
-                              Duplicate
-                            </button>
-                            <button
-                              type="button"
-                              className="btn mini btnDanger"
-                              onClick={() => void deleteOneEnvRow(row.key)}
-                              disabled={envBusy}
-                              title="Deletes this key from the .env file"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                <div className="rounded-lg border border-border/80 bg-muted/10 p-3">
+                  <h3 className="text-sm font-semibold">Add / update key</h3>
+                  <div className="mt-3 flex max-w-xl flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="env-new-key">Key</Label>
+                      <Input id="env-new-key" className="font-mono text-sm" value={envKey} onChange={(e) => setEnvKey(e.target.value)} placeholder="OPENAI_API_KEY" />
                     </div>
-                  );
-                })}
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="env-new-val">Value</Label>
+                      <textarea
+                        id="env-new-val"
+                        rows={3}
+                        className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        value={envVal}
+                        onChange={(e) => setEnvVal(e.target.value)}
+                        placeholder="paste token"
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                    </div>
+                    <Button type="button" onClick={() => void saveEnv()} disabled={envBusy}>
+                      {envBusy ? "Saving…" : "Save env"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      After saving, the server updates runtime env and reloads config automatically.
+                    </p>
+                  </div>
+                </div>
 
-                {envEditRows.length === 0 && (
-                  <div className="muted">No keys in .env (file missing or empty). Add a key above.</div>
-                )}
-              </div>
-            </div>
+                <div className="rounded-lg border border-border/80 bg-muted/10 p-3">
+                  <h3 className="text-sm font-semibold">Variables in .env file</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Click a key to view/edit. Save only appears when the value changed.</p>
+                  <div className="mt-3 flex flex-col gap-2">
+                    {envEditRows.map((row) => {
+                      const open = envRowOpenKey === row.key;
+                      const original = (env?.dotenvEntries ?? []).find((e) => e.key === row.key)?.value ?? "";
+                      const dirty = row.value !== original;
+                      return (
+                        <div key={row.key} className="rounded-lg border border-border/60 bg-background/40 p-2">
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/40"
+                            onClick={() => setEnvRowOpenKey((prev) => (prev === row.key ? null : row.key))}
+                          >
+                            <span className="font-mono text-xs">{row.key}</span>
+                            {dirty ? <span className="text-xs text-muted-foreground">modified</span> : null}
+                          </button>
+                          {open ? (
+                            <div className="mt-2 flex flex-col gap-2">
+                              <textarea
+                                className="min-h-[4.25rem] w-full resize-y rounded-md border border-input bg-transparent px-2 py-1.5 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                value={row.value}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setEnvEditRows((prev) => prev.map((r) => (r.key === row.key ? { ...r, value: v } : r)));
+                                }}
+                                spellCheck={false}
+                              />
+                              <div className="flex flex-wrap gap-2">
+                                {dirty ? (
+                                  <Button type="button" size="sm" disabled={envBusy} onClick={() => void saveOneEnvRow(row.key, row.value)}>
+                                    Save
+                                  </Button>
+                                ) : null}
+                                <Button type="button" size="sm" variant="secondary" onClick={() => duplicateEnvRow(row.key)} disabled={envBusy}>
+                                  Duplicate
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => void deleteOneEnvRow(row.key)}
+                                  disabled={envBusy}
+                                  title="Deletes this key from the .env file"
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+
+                    {envEditRows.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No keys in .env (file missing or empty). Add a key above.</p>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-        )}
-      </Drawer>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

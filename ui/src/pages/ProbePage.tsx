@@ -1,5 +1,9 @@
 import React, { useCallback, useState } from "react";
 import { apiPost } from "../lib/api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type DiscoverResponse = {
   ok: boolean;
@@ -38,58 +42,58 @@ export function ProbePage() {
   }, [baseUrl, apiKey]);
 
   return (
-    <div className="page">
-      <div className="topbar">
-        <div className="topbarTitle">Endpoint probe</div>
-        <div className="spacer" />
+    <div className="flex min-h-0 flex-col gap-4">
+      <div className="border-b border-border pb-3">
+        <h1 className="text-lg font-semibold tracking-tight">Endpoint probe</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          Call <span className="font-mono text-foreground/90">GET /v1/models</span> on an OpenAI-compatible base URL via the server (avoids browser CORS).
+          Keys are sent only to your llmog admin API, not stored.
+        </p>
       </div>
-      <p className="muted" style={{ marginTop: 0, maxWidth: "40rem" }}>
-        Call <span className="mono">GET /v1/models</span> on an OpenAI-compatible base URL via the server (avoids browser CORS).
-        Keys are sent only to your llmog admin API, not stored.
-      </p>
 
-      <div className="panel" style={{ maxWidth: "44rem" }}>
-        <div className="formGrid formStack">
-          <label className="field">
-            <span className="fieldLabel">Base URL</span>
-            <input
-              className="mono"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://api.openai.com"
-            />
-          </label>
-          <label className="field">
-            <span className="fieldLabel">API key (optional)</span>
-            <input
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle className="text-base">Probe</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="probe-base">Base URL</Label>
+            <Input id="probe-base" className="font-mono text-sm" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="probe-key">API key (optional)</Label>
+            <Input
+              id="probe-key"
               type="password"
               autoComplete="off"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="sk-…"
             />
-          </label>
-          <div>
-            <button type="button" className="btn btnPrimary" disabled={loading || !baseUrl.trim()} onClick={() => void run()}>
-              {loading ? "Fetching…" : "Fetch models"}
-            </button>
           </div>
-        </div>
-      </div>
+          <Button type="button" disabled={loading || !baseUrl.trim()} onClick={() => void run()}>
+            {loading ? "Fetching…" : "Fetch models"}
+          </Button>
+        </CardContent>
+      </Card>
 
-      {err ? <div className="alert err">{err}</div> : null}
+      {err ? (
+        <div className="max-w-2xl rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{err}</div>
+      ) : null}
 
       {models.length > 0 ? (
-        <div className="panel" style={{ maxWidth: "44rem" }}>
-          <div className="panelTitle" style={{ marginBottom: "0.5rem" }}>
-            Models ({models.length})
-          </div>
-          <ul className="mono" style={{ margin: 0, paddingLeft: "1.25rem", fontSize: "0.88rem" }}>
-            {models.map((m) => (
-              <li key={m}>{m}</li>
-            ))}
-          </ul>
-        </div>
+        <Card className="max-w-2xl">
+          <CardHeader>
+            <CardTitle className="text-base">Models ({models.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-inside list-disc space-y-1 font-mono text-sm text-foreground/90">
+              {models.map((m) => (
+                <li key={m}>{m}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       ) : null}
     </div>
   );
